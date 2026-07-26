@@ -41,6 +41,9 @@ c      ---particle reynolds number---
        Rep(k) = rhog*dp(k)
      &        * sqrt( uxp(k)*uxp(k)+uyp(k)*uyp(k) ) / xmug
 
+c      速度がほぼ0のとき Cdf=24/Rep が発散(Inf/NaN)するのを防ぐ下限。
+c      1粒子でも NaN になると粒子間クーロン力の総和で全粒子に伝播するため。
+       if( Rep(k) .lt. 1.e-8 ) Rep(k) = 1.e-8
 
        if( Rep(k) .lt. 0.2 )then
 

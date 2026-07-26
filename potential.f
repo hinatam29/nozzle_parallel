@@ -209,8 +209,9 @@ c        diel = 0.5*( x(i,k)*epsi(i,k)
 c    &              + x(i+1,k)*epsi(i+1,k) )
 c        diel = 0.5*( x(i,k)
 c    &              + x(i+1,k) )
-         diel = 0.5*( x(i,k)+x(i+1,k) )*epsig*eps0
-c        diel = 1.
+c        円筒: diel = 0.5*(x(i,k)+x(i+1,k))*epsig*eps0 （面の半径rで重み）
+c        平面2次元: r重みを外す
+         diel = epsig*eps0
 c        diel = 1.
          F1(ijk) = drs*diel
   240 continue
@@ -226,8 +227,8 @@ c
 
          xx2 = 0.5*(x(i+1,k) + x(i,k))
 
-         rrkps = 1./xx2
-c        rrkps = 1.
+c        rrkps = 1./xx2   ! 円筒: 1/r 係数
+         rrkps = 1.       ! 平面2次元: 1/r なし
 c        drs = 0.5*(x(i+1,k) - x(i-1,k))
          drs = sdx1(i,k)
          drs = 1./drs

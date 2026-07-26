@@ -38,9 +38,9 @@ c      dd = 1.e-4
        cg8 = cg(i+1,j)
 
 
+c      平面2次元: 円筒の第1次微分項 (1/sdx)*(cg8-cg0)/sdx を除去
        cgn0 = cg0
      &      + dt*1.6e-5*( (cg2-2.*cg0+cg8)/sdx(i,j)/sdx(i,j)
-     &                   +1./sdx(i,j)*(cg8-cg0)/sdx(i,j)
      &                   +(cg4-2.*cg0+cg6)/sdy(i,j)/sdy(i,j) )
 
        cgnn(i,j) = cgn0
@@ -128,7 +128,8 @@ c      crate(i,j) = crate(i,j)*100
 c         write(*,*) i,j,crate(i,j)
 c         end if
 
-          vcell(i,j) = 4.e-8 * 2 * pi * x(i,j)
+c         vcell(i,j) = 4.e-8 * 2 * pi * x(i,j)   ! 円筒: 2πr セル体積
+          vcell(i,j) = 4.e-8                      ! 平面2次元: dx*dy
        
           cvolume(i,j) = 0.445 * crate(i,j) * vcell(i,j)
 c         cvolume(i,j) = crate(i,j) * vcell(i,j)
