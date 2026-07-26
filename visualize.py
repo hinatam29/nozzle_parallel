@@ -1,33 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-静電噴霧シミュレーション結果の可視化プログラム（噴霧粒子のみ）
-=================================================================
+静電噴霧シミュレーション結果の可視化（先行研究フォーマット準拠）
+==================================================================
 
-2 本ノズル並列配置の噴霧粒子を、2 通りの見方で可視化します。
+平面2次元・並列2ノズルの噴霧粒子を、先行研究と同じ体裁で2通り可視化します。
 
-  (1) 液滴の広がり      : 液滴の位置分布（両ノズルから出た噴霧の広がり）
-  (2) 液滴の二酸化炭素吸収 : 液滴を「その液滴が吸収した二酸化炭素量 clt」で
-                            色分け（対数スケール）。吸収の進み具合が分かる。
+  (1) 液滴の広がり  : 液滴を「粒径 d [m]」で色分けした散布図（先行研究 図1）
+  (2) 二酸化炭素吸収 : 液滴の吸収量 clt を格子に集計した「C_total [mol]」の
+                       塗り等高線（先行研究 図2の右半分）
 
-読み込むファイル
-  spray.dat : 噴霧粒子データ（Tecplot point 形式）
-              変数 = xp, yp, dp(粒径), clt(粒子ごとの吸収量), pout(状態)
-  （気相の場データ flow.dat は使いません。）
+いずれもノズル・対向電極を灰色の四角で描き、軸は r [mm] / z [mm]。
+左右対称なので既定では片側ノズル（r=0側）に拡大して先行研究と比較しやすくします。
 
-生成物（既定は両方）
-  spread_snapshot_*.png / spread_animation.(mp4|gif)   … 広がり
-  absorb_snapshot_*.png / absorb_animation.(mp4|gif)   … 吸収
+読み込み: spray.dat（xp, yp, dp, clt, pout）
 
 使い方（例）
   python visualize.py
-  python visualize.py --kind spread          # 広がりだけ
-  python visualize.py --kind absorb          # 吸収だけ
-  python visualize.py --max-frames 18        # 正常範囲(istp<=17000)だけ
-  python visualize.py --mode anim --fps 8
-
-注意
-  粒子は istp=18000 で数値発散(NaN)します。発散フレームは自動的に除外
-  されますが、'--max-frames 18' を付けると正常範囲だけを確実に扱えます。
+  python visualize.py --rmax 8            # 表示する r 範囲[mm]（片ノズル拡大）
+  python visualize.py --full              # 全幅（両ノズル）表示
+  python visualize.py --kind spread       # 広がりだけ
+  python visualize.py --kind absorb       # 吸収だけ
+  python visualize.py --max-frames 18     # 正常範囲だけ（発散フレーム除外）
 
 必要ライブラリ : numpy, matplotlib
 """
@@ -43,12 +36,21 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import animation
-from matplotlib.colors import LogNorm
+from matplotlib.patches import Rectangle
+from matplotlib.colors import BoundaryNorm, LogNorm
 
 
-# ----------------------------------------------------------------------
-# 日本語フォント
-# ----------------------------------------------------------------------
+# ---- 幾何形状（geo.f と対応、単位 m）----------------------------------
+YLEN = 0.1
+XLEN = 0.1
+XNOZ = 0.4e-3       # ノズル半径方向幅
+YNOZ = 1.0e-3       # ノズル軸方向長さ（上端から）
+XHOL = 5.0e-3       # 対向電極の穴（r<XHOL, および r>XLEN-XHOL）
+YHOL1 = 93.0e-3
+YHOL2 = 92.0e-3
+DX = XLEN / 500.0   # 格子間隔（nx=500）
+
+
 def setup_font():
     from matplotlib import font_manager
     for name in ["Yu Gothic", "Meiryo", "MS Gothic", "MS PGothic",
@@ -62,29 +64,17 @@ def setup_font():
 
 
 JP = setup_font()
-
 L = {
-    "r": "半径方向 r [m]" if JP else "radial  r [m]",
-    "z": "軸方向 z [m]" if JP else "axial  z [m]",
-    "cbar_clt": "液滴が吸収した二酸化炭素量 clt"
-                if JP else "droplet absorbed carbon dioxide  clt",
+    "r": "r [mm]", "z": "z [mm]",
+    "d": "d [m]", "ct": "C_total [mol]",
     "step": "ステップ" if JP else "step",
     "t_spread": "液滴の広がり" if JP else "Droplet spread",
-    "t_absorb": "液滴の二酸化炭素吸収"
-                if JP else "Droplet carbon dioxide absorption",
-    "n1": "ノズル1" if JP else "nozzle 1",
-    "n2": "ノズル2" if JP else "nozzle 2",
+    "t_absorb": "二酸化炭素吸収" if JP else "CO2 absorption",
 }
 
 
-# ----------------------------------------------------------------------
-# Tecplot point 形式パーサ（3桁指数の E 省略・NaN に対応）
-# ----------------------------------------------------------------------
+# ---- Tecplot パーサ（3桁指数E省略・NaN対応）--------------------------
 _exp_fix = re.compile(r"(\d\.\d+)([+-]\d{2,3})(?![\d.])")
-
-
-def fix_exp(s):
-    return _exp_fix.sub(r"\1E\2", s)
 
 
 def to_float(t):
@@ -94,12 +84,10 @@ def to_float(t):
         return np.nan
 
 
-def read_tecplot(path, stride=1, max_frames=None):
+def read_spray(path, stride=1, max_frames=None):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
-    varnames = None
-    frames = []
-    zidx = -1
+    varnames, frames, zidx = None, [], -1
     with open(path, "r", errors="replace") as fh:
         pend, buf, keep = None, [], False
 
@@ -107,10 +95,9 @@ def read_tecplot(path, stride=1, max_frames=None):
             nonlocal pend, buf
             if pend is None:
                 return
-            need = pend["npoints"] * (pend["ncols"] or 0)
-            if keep and pend["ncols"] and len(buf) >= need:
-                arr = np.array(buf[:need], dtype=np.float64).reshape(
-                    pend["npoints"], pend["ncols"])
+            need = pend["n"] * (pend["nc"] or 0)
+            if keep and pend["nc"] and len(buf) >= need:
+                arr = np.array(buf[:need]).reshape(pend["n"], pend["nc"])
                 frames.append(dict(istp=pend["istp"], data=arr))
             pend, buf = None, []
 
@@ -128,20 +115,19 @@ def read_tecplot(path, stride=1, max_frames=None):
                 flush()
                 zidx += 1
                 m = re.search(r"n=\s*(\d+)", s)
-                istp = int(m.group(1)) if m else zidx
                 mi = re.search(r"\bi\s*=\s*(\d+)", s, re.I)
-                ni = int(mi.group(1)) if mi else 1
                 keep = (zidx % stride == 0) and (
                     max_frames is None or len(frames) < max_frames)
-                pend = dict(istp=istp, npoints=ni,
-                            ncols=len(varnames) if varnames else None)
+                pend = dict(istp=int(m.group(1)) if m else zidx,
+                            n=int(mi.group(1)) if mi else 1,
+                            nc=len(varnames) if varnames else None)
                 buf = []
                 continue
             if pend is None or not keep:
                 continue
-            toks = fix_exp(s).split()
-            if pend["ncols"] is None:
-                pend["ncols"] = len(toks)
+            toks = _exp_fix.sub(r"\1E\2", s).split()
+            if pend["nc"] is None:
+                pend["nc"] = len(toks)
             buf.extend(to_float(t) for t in toks)
         flush()
     if varnames is None:
@@ -150,7 +136,7 @@ def read_tecplot(path, stride=1, max_frames=None):
     return varnames, frames
 
 
-def active_droplets(varnames, frame):
+def active(varnames, frame):
     idx = {n: i for i, n in enumerate(varnames)}
     d = frame["data"]
     xp = d[:, idx.get("xp", 0)]
@@ -162,145 +148,139 @@ def active_droplets(varnames, frame):
     return xp[m], yp[m], dp[m], clt[m]
 
 
-# ----------------------------------------------------------------------
-# 全フレーム共通のスケール
-# ----------------------------------------------------------------------
-def compute_scales(vns, frames):
-    xs, ys, dps, clts = [], [], [], []
+# ---- 灰色の四角（ノズル・電極）----------------------------------------
+def draw_geometry(ax):
+    """全幾何を絶対座標[mm]で描く。各パネルは xlim で切り取る。
+       ノズル1(r=0), ノズル2(r=XLEN), 対向電極(r=XHOL..XLEN-XHOL)。"""
+    def rect(r0, r1, z0, z1):
+        ax.add_patch(Rectangle((r0, z0), r1 - r0, z1 - z0,
+                               facecolor="0.8", edgecolor="0.5",
+                               linewidth=0.6, zorder=4))
+    znoz0, znoz1 = (YLEN - YNOZ) * 1e3, YLEN * 1e3          # 99..100
+    zel0, zel1 = YHOL2 * 1e3, YHOL1 * 1e3                    # 92..93
+    rect(0.0, XNOZ * 1e3, znoz0, znoz1)                      # ノズル1
+    rect((XLEN - XNOZ) * 1e3, XLEN * 1e3, znoz0, znoz1)      # ノズル2
+    rect(XHOL * 1e3, (XLEN - XHOL) * 1e3, zel0, zel1)        # 電極(両端に穴)
+
+
+# ---- 広がり（粒径 d で色分け）-----------------------------------------
+D_LEVELS = np.arange(2.0, 8.5, 0.5) * 1e-7   # 2E-7 .. 8E-7 (先行研究準拠)
+
+
+def plot_spread(ax, varnames, frame):
+    xp, yp, dp, clt = active(varnames, frame)
+    cmap = plt.cm.jet
+    norm = BoundaryNorm(D_LEVELS, cmap.N, extend="both")
+    sc = None
+    if len(xp):
+        sc = ax.scatter(xp * 1e3, yp * 1e3, s=6, c=dp, cmap=cmap, norm=norm,
+                        edgecolors="none", zorder=3)
+    draw_geometry(ax)
+    return sc
+
+
+# ---- 吸収（C_total 塗り等高線）----------------------------------------
+def bin_ctotal(xp, yp, clt, rmax_m, zlim_m, bin_m):
+    nx = max(int(rmax_m / bin_m), 4)
+    nz = max(int((zlim_m[1] - zlim_m[0]) / bin_m), 4)
+    H, xe, ye = np.histogram2d(
+        xp, yp, bins=[nx, nz],
+        range=[[0, rmax_m], [zlim_m[0], zlim_m[1]]], weights=clt)
+    # 軽い平滑化（3x3 平均、numpy のみ）
+    Hs = H.copy()
+    Hs[1:-1, 1:-1] = (H[:-2, 1:-1] + H[2:, 1:-1] + H[1:-1, :-2] + H[1:-1, 2:]
+                      + H[1:-1, 1:-1] + H[:-2, :-2] + H[:-2, 2:]
+                      + H[2:, :-2] + H[2:, 2:]) / 9.0
+    xc = 0.5 * (xe[:-1] + xe[1:])
+    yc = 0.5 * (ye[:-1] + ye[1:])
+    return xc, yc, Hs
+
+
+def plot_absorb(ax, varnames, frame, zlim, cmax):
+    xp, yp, dp, clt = active(varnames, frame)
+    zlim_m = (zlim[0] * 1e-3, zlim[1] * 1e-3)
+    cf = None
+    if len(xp) and cmax > 0:
+        xc, yc, H = bin_ctotal(xp, yp, clt, XLEN, zlim_m, 2 * DX)
+        levels = np.logspace(np.log10(cmax) - 3, np.log10(cmax), 12)
+        Hp = np.clip(H.T, levels[0] * 0.5, None)
+        cf = ax.contourf(xc * 1e3, yc * 1e3, Hp, levels=levels,
+                         cmap="jet", norm=LogNorm(levels[0], levels[-1]),
+                         extend="both", zorder=2)
+    draw_geometry(ax)
+    return cf
+
+
+# ---- スケール ---------------------------------------------------------
+def clt_cmax(varnames, frames, zlim, bin_m):
+    zlim_m = (zlim[0] * 1e-3, zlim[1] * 1e-3)
+    mx = 0.0
     for fr in frames:
-        xp, yp, dp, clt = active_droplets(vns, fr)
+        xp, yp, dp, clt = active(varnames, fr)
         if len(xp):
-            xs.append(xp); ys.append(yp); dps.append(dp); clts.append(clt)
-    if not xs:
-        return dict(xlim=(0, 0.1), ylim=(0, 0.1), ytop=0.1, xlen=0.1,
-                    dp=(1e-7, 1e-6), clt=(1e-24, 1e-21))
-    x = np.concatenate(xs); y = np.concatenate(ys)
-    dp = np.concatenate(dps); clt = np.concatenate(clts)
-    xlen = float(x.max())
-    ytop = float(y.max())
-    ylo, yhi = float(y.min()), float(y.max())
-    pad = max(0.06 * (yhi - ylo), 0.002)
-    ylim = (ylo - pad, min(yhi + pad, ytop + pad))
-    xpad = 0.02 * xlen
-    xlim = (min(0.0, float(x.min())) - xpad, xlen + xpad)
-    cpos = clt[clt > 0]
-    if cpos.size:
-        cmin = float(np.percentile(cpos, 5))
-        cmax = float(np.percentile(cpos, 99))
-        if cmin <= 0 or cmin >= cmax:
-            cmin, cmax = cpos.min(), cpos.max()
+            _, _, H = bin_ctotal(xp, yp, clt, XLEN, zlim_m, bin_m)
+            if H.size and H.max() > 0:
+                mx = max(mx, float(H.max()))
+    return mx
+
+
+def build_fig(single):
+    if single:
+        fig = plt.figure(figsize=(4.8, 6.6))
+        axes = [fig.add_axes([0.16, 0.10, 0.60, 0.80])]
+        cax = fig.add_axes([0.80, 0.10, 0.03, 0.80])
     else:
-        cmin, cmax = 1e-24, 1e-21
-    return dict(xlim=xlim, ylim=ylim, ytop=ytop, xlen=xlen,
-                dp=(float(dp.min()), float(dp.max())), clt=(cmin, cmax))
+        fig = plt.figure(figsize=(7.6, 6.6))
+        axes = [fig.add_axes([0.10, 0.10, 0.34, 0.78]),
+                fig.add_axes([0.47, 0.10, 0.34, 0.78])]
+        cax = fig.add_axes([0.86, 0.10, 0.025, 0.78])
+    return fig, axes, cax
 
 
-def sizes_from_dp(dp, dprange):
-    lo, hi = dprange
-    if hi <= lo:
-        return np.full(np.shape(dp), 26.0)
-    s = (np.asarray(dp) - lo) / (hi - lo)
-    return 12.0 + 60.0 * np.clip(s, 0, 1)
-
-
-def draw_nozzles(ax, sc):
-    for xpos, name, ha in ((0.0, L["n1"], "left"),
-                           (sc["xlen"], L["n2"], "right")):
-        ax.scatter([xpos], [sc["ytop"]], marker="v", s=140, c="red",
-                   edgecolors="k", linewidths=0.6, zorder=6, clip_on=False)
-        ax.annotate(name, xy=(xpos, sc["ytop"]), xytext=(0, 9),
-                    textcoords="offset points", ha=ha, va="bottom",
-                    color="red", fontsize=9, zorder=6, clip_on=False)
-
-
-# ----------------------------------------------------------------------
-# 描画（kind = "spread" または "absorb"）
-# ----------------------------------------------------------------------
-def draw(ax, cax, vns, frame, kind, sc, norm):
-    ax.clear()
-    xp, yp, dp, clt = active_droplets(vns, frame)
-    sizes = sizes_from_dp(dp, sc["dp"]) if len(xp) else 26.0
-    sm = None
-    if kind == "spread":
-        if len(xp):
-            ax.scatter(xp, yp, s=sizes, c="#1f77b4", alpha=0.6,
-                       edgecolors="none", zorder=5)
-        title = L["t_spread"]
-    else:  # absorb
-        if len(xp):
-            sm = ax.scatter(xp, yp, s=sizes, c=np.clip(clt, norm.vmin, None),
-                            cmap="inferno", norm=norm, alpha=0.9,
-                            edgecolors="k", linewidths=0.2, zorder=5)
-        title = L["t_absorb"]
-    draw_nozzles(ax, sc)
-    ax.set_xlim(*sc["xlim"]); ax.set_ylim(*sc["ylim"])
-    ax.set_xlabel(L["r"]); ax.set_ylabel(L["z"])
-    ax.set_title(f'{title}   ({L["step"]} = {frame.get("istp")})')
-    if cax is not None:
-        cax.cla()
-        if sm is not None:
-            plt.colorbar(sm, cax=cax, label=L["cbar_clt"])
-        else:
-            cax.axis("off")
-
-
-def make_fig(kind):
-    fig = plt.figure(figsize=(10.5, 4.6))
-    if kind == "absorb":
-        ax = fig.add_axes([0.08, 0.16, 0.80, 0.72])
-        cax = fig.add_axes([0.90, 0.16, 0.02, 0.72])
+def render_into(fig, axes, cax, kind, vns, frame, zlim, rmax_mm, cmax):
+    for ax in axes:
+        ax.clear()
+    cax.cla()
+    if len(axes) == 1:
+        xlims = [(0, rmax_mm)]
     else:
-        ax = fig.add_axes([0.08, 0.16, 0.86, 0.72])
-        cax = None
-    return fig, ax, cax
+        xlims = [(0, rmax_mm), (XLEN * 1e3 - rmax_mm, XLEN * 1e3)]
+    mapp = None
+    for ax, xl in zip(axes, xlims):
+        m = (plot_spread(ax, vns, frame) if kind == "spread"
+             else plot_absorb(ax, vns, frame, zlim, cmax))
+        if m is not None:
+            mapp = m
+        ax.set_xlim(*xl)
+        ax.set_ylim(*zlim)
+        ax.set_xlabel(L["r"])
+    axes[0].set_ylabel(L["z"])
+    if len(axes) == 2:
+        axes[1].set_yticklabels([])
+        axes[0].set_title("ノズル1" if JP else "nozzle 1", fontsize=10)
+        axes[1].set_title("ノズル2" if JP else "nozzle 2", fontsize=10)
+    title = L["t_spread"] if kind == "spread" else L["t_absorb"]
+    fig.suptitle(f'{title}   ({L["step"]}={frame.get("istp")})', y=0.985)
+    if mapp is not None:
+        plt.colorbar(mapp, cax=cax,
+                     label=(L["d"] if kind == "spread" else L["ct"]))
+    else:
+        cax.axis("off")
 
 
-def run_kind(kind, vns, frames, sc, outdir, mode, nsnap, fps):
-    norm = LogNorm(vmin=sc["clt"][0], vmax=sc["clt"][1]) \
-        if kind == "absorb" else None
-    if mode in ("snap", "both"):
-        picks = np.unique(np.linspace(0, len(frames) - 1,
-                                      min(nsnap, len(frames))).astype(int))
-        for k in picks:
-            fig, ax, cax = make_fig(kind)
-            draw(ax, cax, vns, frames[k], kind, sc, norm)
-            p = os.path.join(outdir,
-                             f"{kind}_snapshot_{k:03d}_istp{frames[k]['istp']}.png")
-            fig.savefig(p, dpi=140); plt.close(fig)
-            print(f"  保存: {p}", file=sys.stderr)
-    if mode in ("anim", "both"):
-        fig, ax, cax = make_fig(kind)
-
-        def update(k):
-            draw(ax, cax, vns, frames[k], kind, sc, norm)
-            return []
-
-        anim = animation.FuncAnimation(fig, update, frames=len(frames),
-                                       blit=False)
-        mp4 = os.path.join(outdir, f"{kind}_animation.mp4")
-        gif = os.path.join(outdir, f"{kind}_animation.gif")
-        try:
-            anim.save(mp4, writer=animation.FFMpegWriter(fps=fps, bitrate=2400),
-                      dpi=130)
-            print(f"  保存: {mp4}", file=sys.stderr)
-        except Exception as e:
-            print(f"  MP4 不可 ({e}) -> GIF", file=sys.stderr)
-            try:
-                anim.save(gif, writer=animation.PillowWriter(fps=fps), dpi=100)
-                print(f"  保存: {gif}", file=sys.stderr)
-            except Exception as e2:
-                print(f"  GIF も失敗: {e2}", file=sys.stderr)
-        plt.close(fig)
-
-
-# ----------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description="噴霧粒子の広がり・二酸化炭素吸収の可視化")
+    ap = argparse.ArgumentParser(description="先行研究フォーマットの噴霧可視化")
     ap.add_argument("--spray", default="spray.dat")
     ap.add_argument("--outdir", default="viz_out")
     ap.add_argument("--kind", default="both",
                     choices=["both", "spread", "absorb"])
     ap.add_argument("--mode", default="both", choices=["both", "anim", "snap"])
+    ap.add_argument("--rmax", type=float, default=8.0,
+                    help="各ノズルパネルの r 範囲 [mm]")
+    ap.add_argument("--single", action="store_true",
+                    help="ノズル1側だけ1枚で表示（既定は2本とも）")
+    ap.add_argument("--zmin", type=float, default=86.0)
+    ap.add_argument("--zmax", type=float, default=100.0)
     ap.add_argument("--nsnap", type=int, default=6)
     ap.add_argument("--fps", type=int, default=8)
     ap.add_argument("--stride", type=int, default=1)
@@ -308,21 +288,57 @@ def main():
     args = ap.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
-    print("噴霧データを読み込み中 ...", file=sys.stderr)
-    vns, frames = read_tecplot(args.spray, stride=args.stride,
-                               max_frames=args.max_frames)
+    print("噴霧データ読み込み中 ...", file=sys.stderr)
+    vns, frames = read_spray(args.spray, stride=args.stride,
+                             max_frames=args.max_frames)
     if not frames:
-        print("フレームがありません。", file=sys.stderr); return
-    sc = compute_scales(vns, frames)
-    print(f"  表示範囲 x={sc['xlim']} y={sc['ylim']}", file=sys.stderr)
-    print(f"  clt色スケール(対数) {sc['clt'][0]:.2e}..{sc['clt'][1]:.2e}",
+        print("フレームがありません。", file=sys.stderr)
+        return
+
+    zlim = (args.zmin, args.zmax)
+    single = args.single
+    cmax = clt_cmax(vns, frames, zlim, 2 * DX)
+    print(f"  r範囲/パネル=0..{args.rmax}mm, z={zlim}mm, "
+          f"C_total上限={cmax:.2e}, {'1枚' if single else '2ノズル'}",
           file=sys.stderr)
 
     kinds = ["spread", "absorb"] if args.kind == "both" else [args.kind]
     for kd in kinds:
-        print(f"[{kd}] を作成中 ...", file=sys.stderr)
-        run_kind(kd, vns, frames, sc, args.outdir, args.mode,
-                 args.nsnap, args.fps)
+        print(f"[{kd}] 作成中 ...", file=sys.stderr)
+        if args.mode in ("snap", "both"):
+            fig, axes, cax = build_fig(single)
+            picks = np.unique(np.linspace(0, len(frames) - 1,
+                              min(args.nsnap, len(frames))).astype(int))
+            for k in picks:
+                render_into(fig, axes, cax, kd, vns, frames[k], zlim,
+                            args.rmax, cmax)
+                p = os.path.join(args.outdir,
+                                 f"{kd}_snap_{k:03d}_istp{frames[k]['istp']}.png")
+                fig.savefig(p, dpi=150)
+                print(f"  保存: {p}", file=sys.stderr)
+            plt.close(fig)
+        if args.mode in ("anim", "both"):
+            fig, axes, cax = build_fig(single)
+
+            def upd(k, kd=kd, fig=fig, axes=axes, cax=cax):
+                render_into(fig, axes, cax, kd, vns, frames[k], zlim,
+                            args.rmax, cmax)
+                return []
+
+            anim = animation.FuncAnimation(fig, upd, frames=len(frames),
+                                           blit=False)
+            mp4 = os.path.join(args.outdir, f"{kd}_animation.mp4")
+            try:
+                anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
+                          bitrate=2400), dpi=140)
+                print(f"  保存: {mp4}", file=sys.stderr)
+            except Exception as e:
+                gif = os.path.join(args.outdir, f"{kd}_animation.gif")
+                print(f"  MP4不可({e})->GIF", file=sys.stderr)
+                anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
+                          dpi=100)
+                print(f"  保存: {gif}", file=sys.stderr)
+            plt.close(fig)
     print("完了。出力先: " + os.path.abspath(args.outdir), file=sys.stderr)
 
 
