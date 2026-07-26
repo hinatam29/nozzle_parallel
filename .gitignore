@@ -17,9 +17,9 @@ go.out
 # 旧バックアップ
 *.bak
 
-# 可視化の出力
+# 可視化の出力・一時確認画像
 viz_out/
-_vizcheck*.png
+_*.png
 viz_sample_synthetic.png
 
 # OS / エディタ
