@@ -6,21 +6,19 @@
 平面2次元・並列2ノズルの噴霧粒子を、先行研究と同じ体裁で2通り可視化します。
 
   (1) 液滴の広がり  : 液滴を「粒径 d [m]」で色分けした散布図（先行研究 図1）
-  (2) 二酸化炭素吸収 : 液滴の吸収量 clt を格子に集計した「C_total [mol]」の
+  (2) 二酸化炭素吸収 : 液滴の吸収量 clt を格子集計した「C_total [mol]」の
                        塗り等高線（先行研究 図2の右半分）
 
-いずれもノズル・対向電極を灰色の四角で描き、軸は r [mm] / z [mm]。
-左右対称なので既定では片側ノズル（r=0側）に拡大して先行研究と比較しやすくします。
+既定は「1枚の絵に両ノズル」。ノズル・対向電極は灰色の四角、軸は r/z [mm]。
+ノズル間隔（領域幅 xlen）は spray.dat から自動判定します。
 
 読み込み: spray.dat（xp, yp, dp, clt, pout）
 
 使い方（例）
   python visualize.py
-  python visualize.py --rmax 8            # 表示する r 範囲[mm]（片ノズル拡大）
-  python visualize.py --full              # 全幅（両ノズル）表示
-  python visualize.py --kind spread       # 広がりだけ
-  python visualize.py --kind absorb       # 吸収だけ
-  python visualize.py --max-frames 18     # 正常範囲だけ（発散フレーム除外）
+  python visualize.py --dual          # 左右2パネルで各ノズルを拡大
+  python visualize.py --kind spread   # 広がりだけ
+  python visualize.py --max-frames 18 # 正常範囲だけ（発散フレーム除外）
 
 必要ライブラリ : numpy, matplotlib
 """
@@ -38,17 +36,16 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 from matplotlib.patches import Rectangle
 from matplotlib.colors import BoundaryNorm, LogNorm
+from matplotlib.cm import ScalarMappable
 
 
-# ---- 幾何形状（geo.f と対応、単位 m）----------------------------------
+# ---- 幾何形状（geo.f と対応、単位 m）。xlen はデータから自動判定 ------
 YLEN = 0.1
-XLEN = 0.1
 XNOZ = 0.4e-3       # ノズル半径方向幅
 YNOZ = 1.0e-3       # ノズル軸方向長さ（上端から）
-XHOL = 5.0e-3       # 対向電極の穴（r<XHOL, および r>XLEN-XHOL）
+XHOL = 5.0e-3       # 対向電極の穴（各ノズル側 XHOL 幅）
 YHOL1 = 93.0e-3
 YHOL2 = 92.0e-3
-DX = XLEN / 500.0   # 格子間隔（nx=500）
 
 
 def setup_font():
@@ -65,12 +62,12 @@ def setup_font():
 
 JP = setup_font()
 L = {
-    "r": "r [mm]", "z": "z [mm]",
-    "d": "d [m]", "ct": "C_total [mol]",
+    "r": "r [mm]", "z": "z [mm]", "d": "d [m]", "ct": "C_total [mol]",
     "step": "ステップ" if JP else "step",
     "t_spread": "液滴の広がり" if JP else "Droplet spread",
     "t_absorb": "二酸化炭素吸収" if JP else "CO2 absorption",
 }
+D_LEVELS = np.arange(2.0, 8.5, 0.5) * 1e-7   # 2E-7 .. 8E-7（先行研究準拠）
 
 
 # ---- Tecplot パーサ（3桁指数E省略・NaN対応）--------------------------
@@ -148,45 +145,35 @@ def active(varnames, frame):
     return xp[m], yp[m], dp[m], clt[m]
 
 
-# ---- 灰色の四角（ノズル・電極）----------------------------------------
-def draw_geometry(ax):
-    """全幾何を絶対座標[mm]で描く。各パネルは xlim で切り取る。
-       ノズル1(r=0), ノズル2(r=XLEN), 対向電極(r=XHOL..XLEN-XHOL)。"""
+def infer_xlen(varnames, frames):
+    mx = 0.0
+    for fr in frames:
+        xp, _, _, _ = active(varnames, fr)
+        if len(xp):
+            mx = max(mx, float(xp.max()))
+    return mx if mx > 0 else 0.1
+
+
+# ---- 灰色の四角（ノズル1・ノズル2・対向電極）---------------------------
+def draw_geometry(ax, xlen_m):
+    xl = xlen_m * 1e3
+
     def rect(r0, r1, z0, z1):
-        ax.add_patch(Rectangle((r0, z0), r1 - r0, z1 - z0,
-                               facecolor="0.8", edgecolor="0.5",
-                               linewidth=0.6, zorder=4))
-    znoz0, znoz1 = (YLEN - YNOZ) * 1e3, YLEN * 1e3          # 99..100
-    zel0, zel1 = YHOL2 * 1e3, YHOL1 * 1e3                    # 92..93
-    rect(0.0, XNOZ * 1e3, znoz0, znoz1)                      # ノズル1
-    rect((XLEN - XNOZ) * 1e3, XLEN * 1e3, znoz0, znoz1)      # ノズル2
-    rect(XHOL * 1e3, (XLEN - XHOL) * 1e3, zel0, zel1)        # 電極(両端に穴)
+        ax.add_patch(Rectangle((r0, z0), r1 - r0, z1 - z0, facecolor="0.8",
+                               edgecolor="0.5", linewidth=0.6, zorder=4))
+    zn0, zn1 = (YLEN - YNOZ) * 1e3, YLEN * 1e3
+    ze0, ze1 = YHOL2 * 1e3, YHOL1 * 1e3
+    rect(0.0, XNOZ * 1e3, zn0, zn1)                    # ノズル1
+    rect(xl - XNOZ * 1e3, xl, zn0, zn1)                # ノズル2
+    rect(XHOL * 1e3, xl - XHOL * 1e3, ze0, ze1)        # 電極（両端に穴）
 
 
-# ---- 広がり（粒径 d で色分け）-----------------------------------------
-D_LEVELS = np.arange(2.0, 8.5, 0.5) * 1e-7   # 2E-7 .. 8E-7 (先行研究準拠)
-
-
-def plot_spread(ax, varnames, frame):
-    xp, yp, dp, clt = active(varnames, frame)
-    cmap = plt.cm.jet
-    norm = BoundaryNorm(D_LEVELS, cmap.N, extend="both")
-    sc = None
-    if len(xp):
-        sc = ax.scatter(xp * 1e3, yp * 1e3, s=6, c=dp, cmap=cmap, norm=norm,
-                        edgecolors="none", zorder=3)
-    draw_geometry(ax)
-    return sc
-
-
-# ---- 吸収（C_total 塗り等高線）----------------------------------------
-def bin_ctotal(xp, yp, clt, rmax_m, zlim_m, bin_m):
-    nx = max(int(rmax_m / bin_m), 4)
+# ---- C_total の格子集計 ----------------------------------------------
+def bin_ctotal(xp, yp, clt, xlen_m, zlim_m, bin_m):
+    nx = max(int(xlen_m / bin_m), 4)
     nz = max(int((zlim_m[1] - zlim_m[0]) / bin_m), 4)
-    H, xe, ye = np.histogram2d(
-        xp, yp, bins=[nx, nz],
-        range=[[0, rmax_m], [zlim_m[0], zlim_m[1]]], weights=clt)
-    # 軽い平滑化（3x3 平均、numpy のみ）
+    H, xe, ye = np.histogram2d(xp, yp, bins=[nx, nz],
+                               range=[[0, xlen_m], list(zlim_m)], weights=clt)
     Hs = H.copy()
     Hs[1:-1, 1:-1] = (H[:-2, 1:-1] + H[2:, 1:-1] + H[1:-1, :-2] + H[1:-1, 2:]
                       + H[1:-1, 1:-1] + H[:-2, :-2] + H[:-2, 2:]
@@ -196,61 +183,69 @@ def bin_ctotal(xp, yp, clt, rmax_m, zlim_m, bin_m):
     return xc, yc, Hs
 
 
-def plot_absorb(ax, varnames, frame, zlim, cmax):
-    xp, yp, dp, clt = active(varnames, frame)
+# ---- 1パネルの中身を描く（カラーバーは触らない）-----------------------
+def plot_spread(ax, vns, frame, xlen_m, norm):
+    xp, yp, dp, clt = active(vns, frame)
+    if len(xp):
+        ax.scatter(xp * 1e3, yp * 1e3, s=6, c=dp, cmap=plt.cm.jet, norm=norm,
+                   edgecolors="none", zorder=3)
+    draw_geometry(ax, xlen_m)
+
+
+def plot_absorb(ax, vns, frame, xlen_m, zlim, bin_m, levels, norm):
+    xp, yp, dp, clt = active(vns, frame)
     zlim_m = (zlim[0] * 1e-3, zlim[1] * 1e-3)
-    cf = None
-    if len(xp) and cmax > 0:
-        xc, yc, H = bin_ctotal(xp, yp, clt, XLEN, zlim_m, 2 * DX)
-        levels = np.logspace(np.log10(cmax) - 3, np.log10(cmax), 12)
+    if len(xp):
+        xc, yc, H = bin_ctotal(xp, yp, clt, xlen_m, zlim_m, bin_m)
         Hp = np.clip(H.T, levels[0] * 0.5, None)
-        cf = ax.contourf(xc * 1e3, yc * 1e3, Hp, levels=levels,
-                         cmap="jet", norm=LogNorm(levels[0], levels[-1]),
-                         extend="both", zorder=2)
-    draw_geometry(ax)
-    return cf
+        ax.contourf(xc * 1e3, yc * 1e3, Hp, levels=levels, cmap="jet",
+                    norm=norm, extend="both", zorder=2)
+    draw_geometry(ax, xlen_m)
 
 
-# ---- スケール ---------------------------------------------------------
-def clt_cmax(varnames, frames, zlim, bin_m):
+def clt_cmax(vns, frames, xlen_m, zlim, bin_m):
     zlim_m = (zlim[0] * 1e-3, zlim[1] * 1e-3)
     mx = 0.0
     for fr in frames:
-        xp, yp, dp, clt = active(varnames, fr)
+        xp, yp, dp, clt = active(vns, fr)
         if len(xp):
-            _, _, H = bin_ctotal(xp, yp, clt, XLEN, zlim_m, bin_m)
+            _, _, H = bin_ctotal(xp, yp, clt, xlen_m, zlim_m, bin_m)
             if H.size and H.max() > 0:
                 mx = max(mx, float(H.max()))
     return mx
 
 
-def build_fig(single):
-    if single:
-        fig = plt.figure(figsize=(4.8, 6.6))
-        axes = [fig.add_axes([0.16, 0.10, 0.60, 0.80])]
-        cax = fig.add_axes([0.80, 0.10, 0.03, 0.80])
-    else:
+# ---- 図の構築（カラーバーは固定スケールで一度だけ作る）----------------
+def build(kind, dual, xlen_m, norm, cmap, label):
+    if dual:
         fig = plt.figure(figsize=(7.6, 6.6))
         axes = [fig.add_axes([0.10, 0.10, 0.34, 0.78]),
                 fig.add_axes([0.47, 0.10, 0.34, 0.78])]
         cax = fig.add_axes([0.86, 0.10, 0.025, 0.78])
-    return fig, axes, cax
+    else:
+        w = 9.5 if xlen_m > 0.06 else 7.0
+        fig = plt.figure(figsize=(w, 4.6))
+        axes = [fig.add_axes([0.08, 0.14, 0.80, 0.74])]
+        cax = fig.add_axes([0.90, 0.14, 0.02, 0.74])
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    fig.colorbar(sm, cax=cax, label=label)   # 固定：以後は再作成しない
+    return fig, axes
 
 
-def render_into(fig, axes, cax, kind, vns, frame, zlim, rmax_mm, cmax):
+def render(fig, axes, kind, vns, frame, xlen_m, zlim, rmax_mm,
+           norm, bin_m, levels):
     for ax in axes:
         ax.clear()
-    cax.cla()
     if len(axes) == 1:
-        xlims = [(0, rmax_mm)]
+        xlims = [(0, xlen_m * 1e3)]
     else:
-        xlims = [(0, rmax_mm), (XLEN * 1e3 - rmax_mm, XLEN * 1e3)]
-    mapp = None
+        xlims = [(0, rmax_mm), (xlen_m * 1e3 - rmax_mm, xlen_m * 1e3)]
     for ax, xl in zip(axes, xlims):
-        m = (plot_spread(ax, vns, frame) if kind == "spread"
-             else plot_absorb(ax, vns, frame, zlim, cmax))
-        if m is not None:
-            mapp = m
+        if kind == "spread":
+            plot_spread(ax, vns, frame, xlen_m, norm)
+        else:
+            plot_absorb(ax, vns, frame, xlen_m, zlim, bin_m, levels, norm)
         ax.set_xlim(*xl)
         ax.set_ylim(*zlim)
         ax.set_xlabel(L["r"])
@@ -260,12 +255,7 @@ def render_into(fig, axes, cax, kind, vns, frame, zlim, rmax_mm, cmax):
         axes[0].set_title("ノズル1" if JP else "nozzle 1", fontsize=10)
         axes[1].set_title("ノズル2" if JP else "nozzle 2", fontsize=10)
     title = L["t_spread"] if kind == "spread" else L["t_absorb"]
-    fig.suptitle(f'{title}   ({L["step"]}={frame.get("istp")})', y=0.985)
-    if mapp is not None:
-        plt.colorbar(mapp, cax=cax,
-                     label=(L["d"] if kind == "spread" else L["ct"]))
-    else:
-        cax.axis("off")
+    fig.suptitle(f'{title}   ({L["step"]}={frame.get("istp")})', y=0.98)
 
 
 def main():
@@ -275,10 +265,10 @@ def main():
     ap.add_argument("--kind", default="both",
                     choices=["both", "spread", "absorb"])
     ap.add_argument("--mode", default="both", choices=["both", "anim", "snap"])
+    ap.add_argument("--dual", action="store_true",
+                    help="左右2パネルで各ノズルを拡大表示")
     ap.add_argument("--rmax", type=float, default=8.0,
-                    help="各ノズルパネルの r 範囲 [mm]")
-    ap.add_argument("--single", action="store_true",
-                    help="ノズル1側だけ1枚で表示（既定は2本とも）")
+                    help="--dual 時の各パネル r 範囲 [mm]")
     ap.add_argument("--zmin", type=float, default=86.0)
     ap.add_argument("--zmax", type=float, default=100.0)
     ap.add_argument("--nsnap", type=int, default=6)
@@ -295,34 +285,40 @@ def main():
         print("フレームがありません。", file=sys.stderr)
         return
 
+    xlen_m = infer_xlen(vns, frames)
     zlim = (args.zmin, args.zmax)
-    single = args.single
-    cmax = clt_cmax(vns, frames, zlim, 2 * DX)
-    print(f"  r範囲/パネル=0..{args.rmax}mm, z={zlim}mm, "
-          f"C_total上限={cmax:.2e}, {'1枚' if single else '2ノズル'}",
-          file=sys.stderr)
+    bin_m = xlen_m / 200.0
+    cmax = clt_cmax(vns, frames, xlen_m, zlim, bin_m)
+    levels = np.logspace(np.log10(cmax) - 3, np.log10(cmax), 12) \
+        if cmax > 0 else np.logspace(-24, -21, 12)
+    norm_s = BoundaryNorm(D_LEVELS, plt.cm.jet.N, extend="both")
+    norm_a = LogNorm(levels[0], levels[-1])
+    print(f"  ノズル間隔(xlen)={xlen_m*1e3:.1f}mm, z={zlim}mm, "
+          f"C_total上限={cmax:.2e}", file=sys.stderr)
 
     kinds = ["spread", "absorb"] if args.kind == "both" else [args.kind]
     for kd in kinds:
+        norm = norm_s if kd == "spread" else norm_a
+        label = L["d"] if kd == "spread" else L["ct"]
         print(f"[{kd}] 作成中 ...", file=sys.stderr)
         if args.mode in ("snap", "both"):
-            fig, axes, cax = build_fig(single)
+            fig, axes = build(kd, args.dual, xlen_m, norm, plt.cm.jet, label)
             picks = np.unique(np.linspace(0, len(frames) - 1,
                               min(args.nsnap, len(frames))).astype(int))
             for k in picks:
-                render_into(fig, axes, cax, kd, vns, frames[k], zlim,
-                            args.rmax, cmax)
+                render(fig, axes, kd, vns, frames[k], xlen_m, zlim,
+                       args.rmax, norm, bin_m, levels)
                 p = os.path.join(args.outdir,
                                  f"{kd}_snap_{k:03d}_istp{frames[k]['istp']}.png")
                 fig.savefig(p, dpi=150)
                 print(f"  保存: {p}", file=sys.stderr)
             plt.close(fig)
         if args.mode in ("anim", "both"):
-            fig, axes, cax = build_fig(single)
+            fig, axes = build(kd, args.dual, xlen_m, norm, plt.cm.jet, label)
 
-            def upd(k, kd=kd, fig=fig, axes=axes, cax=cax):
-                render_into(fig, axes, cax, kd, vns, frames[k], zlim,
-                            args.rmax, cmax)
+            def upd(k, kd=kd, fig=fig, axes=axes, norm=norm):
+                render(fig, axes, kd, vns, frames[k], xlen_m, zlim,
+                       args.rmax, norm, bin_m, levels)
                 return []
 
             anim = animation.FuncAnimation(fig, upd, frames=len(frames),

@@ -153,7 +153,8 @@ c     --- intraction ---
 c     --- image charge across right mirror plane (x=xlen, nozzle 2) ---
 c     image of particle l is located at ( 2*xlen - xp(l) )
 
-      xlen = 1.e-1
+c     xlen = 1.e-1   旧: 10cm。geo.f と同じ値にすること
+      xlen = 4.e-2
 
       do 27 k=1, ip
       do 28 l=1, ip

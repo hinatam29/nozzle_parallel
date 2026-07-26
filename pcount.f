@@ -11,9 +11,10 @@ c      yhol1 = 96.e-3
        yhol1 = 93.e-3
 c      yhol2 = 95.e-3
        yhol2 = 92.e-3
-       xlen = 1.e-1
+c      xlen = 1.e-1   旧: 10cm。geo.f と同じ値にすること
+       xlen = 4.e-2
 c      xlen = 50.e-3
-       ylen = 1.e-1 
+       ylen = 1.e-1
 
 
        do 5 k=1, ip

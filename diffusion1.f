@@ -129,7 +129,8 @@ c         write(*,*) i,j,crate(i,j)
 c         end if
 
 c         vcell(i,j) = 4.e-8 * 2 * pi * x(i,j)   ! 円筒: 2πr セル体積
-          vcell(i,j) = 4.e-8                      ! 平面2次元: dx*dy
+c         平面2次元: セル面積 dx*dy（任意格子でも正しい）
+          vcell(i,j) = sdx(i,j)*sdy(i,j)
        
           cvolume(i,j) = 0.445 * crate(i,j) * vcell(i,j)
 c         cvolume(i,j) = crate(i,j) * vcell(i,j)

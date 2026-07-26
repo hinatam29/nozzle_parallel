@@ -3,8 +3,10 @@
       include 'subcom.inc'
 
 c     xlen = 0.165e-3 
-      xlen = 1.e-1 
-c     xlen = 50.e-3 
+c     xlen = 1.e-1     旧: ノズル間隔 10cm
+c     平面2次元では 領域幅 = ノズル間隔。4cm に変更。
+      xlen = 4.e-2
+c     xlen = 50.e-3
 c     xlen = 20.e-3 
 c     ylen = 1.43e-3
 c     ylen = 0.53e-3
