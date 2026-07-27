@@ -261,11 +261,18 @@ c     end if
 
 c     write(*,*) real(istp), fss
 
-      if( ip .eq. ipmx )then
+      if( ip .ge. ipmx-1 )then
          go to 200
       end if
-   
+
+c     --- 液滴の注入：各ノズルとも fss ステップに1個（合計 2個/fss）---
+c     初期設定(initial.f)で 奇数k=ノズル1, 偶数k=ノズル2。ipが1増えるごとに
+c     次の粒子が有効化されるので、1周期に2回(=各ノズル1個)有効化する。
+c     2回の有効化を半周期ずらし、両ノズルが同時刻に噴霧しないようにする。
       if( mod(real(istp),real(fss)) .eq. 0. )then
+         ip = ip + 1
+      end if
+      if( mod(real(istp),real(fss)) .eq. real(int(fss/2.)) )then
          ip = ip + 1
       end if
 
