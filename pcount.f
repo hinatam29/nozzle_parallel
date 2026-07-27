@@ -44,14 +44,24 @@ c      vq(k) = vq(k)/rhol
 
        gv = 9.8
 
-       uxp(k) = uxp(k) - dt*fvisx(k)/vp(k)
-     &        + dt*fer(k) 
-     &        + dt*vq(k)*ftxt(k)/4./pi/eps0
+c      --- 抗力は陰解法で安定化（小液滴で dt >> 緩和時間τ のため）---
+c      抗力率 beta = |F_drag|/(質量*|u|)。非抗力の力は陽的に加える。
+       umag = sqrt( uxp(k)*uxp(k) + uyp(k)*uyp(k) )
+       fmag = sqrt( fvisx(k)*fvisx(k) + fvisy(k)*fvisy(k) )
+       if( umag .gt. 1.e-12 )then
+          beta = fmag / ( vp(k)*umag )
+       else
+          beta = 0.
+       end if
 
-       uyp(k) = uyp(k) - dt*fvisy(k)/vp(k)
-     &        + dt*gv
-     &        + dt*fez(k)
-     &        + dt*vq(k)*ftyt(k)/4./pi/eps0
+       uxp(k) = ( uxp(k)
+     &          + dt*fer(k)
+     &          + dt*vq(k)*ftxt(k)/4./pi/eps0 ) / ( 1.+dt*beta )
+
+       uyp(k) = ( uyp(k)
+     &          + dt*gv
+     &          + dt*fez(k)
+     &          + dt*vq(k)*ftyt(k)/4./pi/eps0 ) / ( 1.+dt*beta )
 
 c      --- 発散粒子の検出・隔離（1粒子の発散が全粒子へ伝播するのを防ぐ）---
 c      粘性/電場/クーロンのどの力が原因かを最大20回だけ出力する
