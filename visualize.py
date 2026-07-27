@@ -258,12 +258,77 @@ def render(fig, axes, kind, vns, frame, xlen_m, zlim, rmax_mm,
     fig.suptitle(f'{title}   ({L["step"]}={frame.get("istp")})', y=0.98)
 
 
+def read_flow_phi(path):
+    """flow.dat の先頭1ゾーンから x, y, phi を読み、2D配列(nj,ni)で返す。
+       電位はソース項が無くラプラス方程式（幾何とBCのみで決まる）なので
+       時間で変わらず、1ゾーンで電場を代表できる。"""
+    if not os.path.exists(path):
+        return None
+    varnames, ni, nj, buf = None, None, None, []
+    with open(path, "r", errors="replace") as fh:
+        for line in fh:
+            s = line.strip()
+            if not s:
+                continue
+            low = s.lower()
+            if low.startswith("title"):
+                continue
+            if low.startswith("variable"):
+                varnames = [n.strip() for n in re.findall(r'"([^"]*)"', s)]
+                continue
+            if low.startswith("zone"):
+                if ni is not None:
+                    break               # 2つ目のzoneで打ち切り
+                mi = re.search(r"\bi\s*=\s*(\d+)", s, re.I)
+                mj = re.search(r"\bj\s*=\s*(\d+)", s, re.I)
+                ni = int(mi.group(1)); nj = int(mj.group(1))
+                continue
+            if ni is None:
+                continue
+            buf.extend(to_float(t) for t in _exp_fix.sub(r"\1E\2", s).split())
+            if len(buf) >= ni * nj * len(varnames):
+                break
+    if not varnames or ni is None or len(buf) < ni * nj * len(varnames):
+        return None
+    nc = len(varnames)
+    a = np.array(buf[:ni * nj * nc]).reshape(nj, ni, nc)
+    idx = {n: i for i, n in enumerate(varnames)}
+    X = a[:, :, idx.get("x", 0)]
+    Y = a[:, :, idx.get("y", 1)]
+    PHI = a[:, :, idx["phi"]] if "phi" in idx else a[:, :, 2]
+    return X, Y, PHI
+
+
+def plot_efield(ax, X, Y, PHI, xlen_m):
+    """電位 phi から電場 E=-∇φ を計算し、|E| の等高線＋電気力線を描く。"""
+    xc = X[0, :]
+    zc = Y[:, 0]
+    dpz, dpx = np.gradient(PHI, zc, xc)
+    Ex, Ez = -dpx, -dpz
+    Emag = np.sqrt(Ex * Ex + Ez * Ez)
+    pos = Emag[np.isfinite(Emag) & (Emag > 0)]
+    vmax = float(np.percentile(pos, 99)) if pos.size else 1.0
+    vmin = vmax / 1e3
+    levels = np.logspace(np.log10(vmin), np.log10(vmax), 12)
+    Ep = np.clip(np.nan_to_num(Emag, nan=vmin), vmin, vmax)
+    cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap="viridis",
+                     norm=LogNorm(vmin, vmax), extend="both", zorder=1)
+    try:
+        ax.streamplot(xc * 1e3, zc * 1e3, Ex, Ez, color="white",
+                      density=1.1, linewidth=0.5, arrowsize=0.7)
+    except Exception:
+        pass
+    draw_geometry(ax, xlen_m)
+    return cf
+
+
 def main():
     ap = argparse.ArgumentParser(description="先行研究フォーマットの噴霧可視化")
     ap.add_argument("--spray", default="spray.dat")
+    ap.add_argument("--flow", default="flow.dat")
     ap.add_argument("--outdir", default="viz_out")
-    ap.add_argument("--kind", default="both",
-                    choices=["both", "spread", "absorb"])
+    ap.add_argument("--kind", default="all",
+                    choices=["all", "both", "spread", "absorb", "efield"])
     ap.add_argument("--mode", default="both", choices=["both", "anim", "snap"])
     ap.add_argument("--dual", action="store_true",
                     help="左右2パネルで各ノズルを拡大表示")
@@ -296,8 +361,13 @@ def main():
     print(f"  ノズル間隔(xlen)={xlen_m*1e3:.1f}mm, z={zlim}mm, "
           f"C_total上限={cmax:.2e}", file=sys.stderr)
 
-    kinds = ["spread", "absorb"] if args.kind == "both" else [args.kind]
-    for kd in kinds:
+    if args.kind == "all":
+        kinds = ["spread", "absorb", "efield"]
+    elif args.kind == "both":
+        kinds = ["spread", "absorb"]
+    else:
+        kinds = [args.kind]
+    for kd in [k for k in kinds if k in ("spread", "absorb")]:
         norm = norm_s if kd == "spread" else norm_a
         label = L["d"] if kd == "spread" else L["ct"]
         print(f"[{kd}] 作成中 ...", file=sys.stderr)
@@ -335,6 +405,30 @@ def main():
                           dpi=100)
                 print(f"  保存: {gif}", file=sys.stderr)
             plt.close(fig)
+
+    if "efield" in kinds:
+        print("[efield] 電場を作成中 ...", file=sys.stderr)
+        res = read_flow_phi(args.flow)
+        if res is None:
+            print(f"  {args.flow} が読めないため電場はスキップ", file=sys.stderr)
+        else:
+            X, Y, PHI = res
+            fig = plt.figure(figsize=(7.0, 4.6))
+            ax = fig.add_axes([0.09, 0.14, 0.78, 0.74])
+            cax = fig.add_axes([0.90, 0.14, 0.02, 0.74])
+            cf = plot_efield(ax, X, Y, PHI, xlen_m)
+            ax.set_xlim(0, xlen_m * 1e3)
+            ax.set_ylim(*zlim)
+            ax.set_xlabel(L["r"])
+            ax.set_ylabel(L["z"])
+            fig.suptitle("電場分布 |E| と電気力線" if JP
+                         else "Electric field |E| and field lines", y=0.98)
+            fig.colorbar(cf, cax=cax, label="|E| [V/m]")
+            p = os.path.join(args.outdir, "efield_field.png")
+            fig.savefig(p, dpi=150)
+            plt.close(fig)
+            print(f"  保存: {p}", file=sys.stderr)
+
     print("完了。出力先: " + os.path.abspath(args.outdir), file=sys.stderr)
 
 
