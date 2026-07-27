@@ -2,6 +2,9 @@
       program main
       include 'subcom.inc'
 
+c     各周期で注入する2ステップ(ノズルごと1回)。-1で初期化=最初の周期まで不注入
+      data ns1, ns2 /-1, -1/
+
       gam = 1.402
 
 c     dt = 5.0e-11
@@ -261,19 +264,23 @@ c     end if
 
 c     write(*,*) real(istp), fss
 
-      if( ip .ge. ipmx-1 )then
-         go to 200
+c     --- 液滴の注入：各ノズルとも fss ステップの窓の中で1回、ランダムな
+c     ステップで注入する。初期設定(initial.f)で 奇数k=ノズル1, 偶数k=ノズル2。
+c     ipが1増えるごとに次の粒子(=交互に別ノズル)が有効化されるので、1周期に
+c     ちょうど2回(=各ノズル1個)有効化する。2ステップは相異なる値を選び、
+c     両ノズルが同時刻に噴霧しないようにする（窓内でランダムに揺らぐ）。
+      iph = int( mod(real(istp),real(fss)) )
+      if( iph .eq. 0 )then
+         ns1 = int( rand()*fss )
+         if( ns1 .ge. int(fss) ) ns1 = int(fss) - 1
+ 210     ns2 = int( rand()*fss )
+         if( ns2 .ge. int(fss) ) ns2 = int(fss) - 1
+         if( ns2 .eq. ns1 ) go to 210
       end if
 
-c     --- 液滴の注入：各ノズルとも fss ステップに1個（合計 2個/fss）---
-c     初期設定(initial.f)で 奇数k=ノズル1, 偶数k=ノズル2。ipが1増えるごとに
-c     次の粒子が有効化されるので、1周期に2回(=各ノズル1個)有効化する。
-c     2回の有効化を半周期ずらし、両ノズルが同時刻に噴霧しないようにする。
-      if( mod(real(istp),real(fss)) .eq. 0. )then
-         ip = ip + 1
-      end if
-      if( mod(real(istp),real(fss)) .eq. real(int(fss/2.)) )then
-         ip = ip + 1
+      if( ip .lt. ipmx-1 )then
+         if( iph .eq. ns1 ) ip = ip + 1
+         if( iph .eq. ns2 ) ip = ip + 1
       end if
 
  200  continue
