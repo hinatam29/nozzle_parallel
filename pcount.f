@@ -2,8 +2,11 @@
        subroutine pcount
        include 'subcom.inc'
 
-       real vp(100000),vq(100000) 
+       real vp(100000),vq(100000)
        real fe(100000), fint(100000)
+
+       save nbad
+       data nbad /0/
 
 
        xhol = 5.e-3 
@@ -50,7 +53,26 @@ c      vq(k) = vq(k)/rhol
      &        + dt*fez(k)
      &        + dt*vq(k)*ftyt(k)/4./pi/eps0
 
-       
+c      --- 発散粒子の検出・隔離（1粒子の発散が全粒子へ伝播するのを防ぐ）---
+c      粘性/電場/クーロンのどの力が原因かを最大20回だけ出力する
+       vmag = sqrt( uxp(k)*uxp(k) + uyp(k)*uyp(k) )
+       if( vmag.ne.vmag .or. vmag.gt.1.e4 )then
+          if( nbad.lt.20 )then
+          write(*,*) 'BADP k=',k,' istp=',istp,
+     &      ' x=',xp(k),' y=',yp(k),
+     &      ' vis=',-dt*fvisx(k)/vp(k),
+     &      ' fer=',dt*fer(k),
+     &      ' coul=',dt*vq(k)*ftxt(k)/4./pi/eps0
+          end if
+          nbad = nbad + 1
+          uxp(k) = 0.
+          uyp(k) = 0.
+          xp(k)  = 0.
+          yp(k)  = 0.
+          pout(k) = 9.
+       end if
+
+
 c      fe(k) = sqrt( fer(k)*fer(k) + fez(k)*fez(k) )
 c      fint(k) = vq(k)*sqrt(ftxt(k)*ftxt(k)+ftyt(k)*ftyt(k))/4./pi/eps0
 

@@ -61,7 +61,8 @@ c     sigg = 1.4
 c     vanode = 0.7e3
 c     vanode = 1.
 c     vanode = -6.e3
-      vanode = 3.e3
+c     vanode = 3.e3
+      vanode = 7.e3
 c     vanode = 0.01e3
 c     vanode = 1.e3
 
@@ -400,8 +401,8 @@ c     --- inside nozzle ---
       do 740 k=jnoz, ny-1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
-c        B(ijk) = 0.
-         B(ijk) = vanode
+c        B(ijk) = vanode   ! 旧: ノズル +7kV
+         B(ijk) = 0.       ! ノズルは接地(0V)
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -440,7 +441,8 @@ c     --- inside nozzle 2 ---
       do 741 k=jnoz, ny-1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
-         B(ijk) = vanode
+c        B(ijk) = vanode   ! 旧: ノズル +7kV
+         B(ijk) = 0.       ! ノズルは接地(0V)
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -510,8 +512,8 @@ c     --- inside ---
       do 780 k=jhol2, jhol1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
-c        B(ijk) = vanode
-         B(ijk) = 0.
+c        B(ijk) = 0.        ! 旧: 対向電極 接地
+         B(ijk) = -vanode   ! 対向電極 -7kV
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
