@@ -12,8 +12,8 @@ c     ip = 10
       pi = 4.*atan(1.)
 
 
-c     xlen = 1.e-1   旧。geo.f と同じ値にすること（ノズル間隔）
-      xlen = 2.e-2
+c     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔）
+      xlen = 1.6e-2
 
       do 10 k=1,ipmx
 
