@@ -322,13 +322,46 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
     return cf
 
 
+EPS0 = 8.8542e-12
+FS_SURF = 42.9e-3          # 表面張力（intraction.f と同じ）
+
+
+def droplet_charge(dp):
+    """レイリー限界の電荷 q = pi*sqrt(8*eps0*fs*dp^3)（コードと同じ）。"""
+    return np.pi * np.sqrt(8.0 * EPS0 * FS_SURF * np.clip(dp, 0, None) ** 3)
+
+
+def efield_from_charges(xp, yp, q, Xg, Zg, xlen_m, soft):
+    """帯電液滴群が格子点に作る電場 E=(1/4πε0)Σ q(r-r_k)/|r-r_k|^3。
+       対称面 x=0, x=xlen に対する鏡像も含める（動力学と整合）。"""
+    kc = 1.0 / (4.0 * np.pi * EPS0)
+    sx = np.concatenate([xp, -xp, 2.0 * xlen_m - xp])   # 実体＋鏡像2枚
+    sy = np.concatenate([yp, yp, yp])
+    sq = np.concatenate([q, q, q])
+    gx = Xg.ravel()
+    gz = Zg.ravel()
+    ex = np.zeros(gx.size)
+    ez = np.zeros(gx.size)
+    s2 = soft * soft
+    ch = 200
+    for i in range(0, gx.size, ch):
+        dx = gx[i:i + ch][:, None] - sx[None, :]
+        dz = gz[i:i + ch][:, None] - sy[None, :]
+        r2 = dx * dx + dz * dz + s2
+        inv = sq[None, :] / (r2 * np.sqrt(r2))
+        ex[i:i + ch] = kc * np.sum(inv * dx, axis=1)
+        ez[i:i + ch] = kc * np.sum(inv * dz, axis=1)
+    return ex.reshape(Xg.shape), ez.reshape(Xg.shape)
+
+
 def main():
     ap = argparse.ArgumentParser(description="先行研究フォーマットの噴霧可視化")
     ap.add_argument("--spray", default="spray.dat")
     ap.add_argument("--flow", default="flow.dat")
     ap.add_argument("--outdir", default="viz_out")
     ap.add_argument("--kind", default="all",
-                    choices=["all", "both", "spread", "absorb", "efield"])
+                    choices=["all", "both", "spread", "absorb", "efield",
+                             "efieldt"])
     ap.add_argument("--mode", default="both", choices=["both", "anim", "snap"])
     ap.add_argument("--dual", action="store_true",
                     help="左右2パネルで各ノズルを拡大表示")
@@ -428,6 +461,86 @@ def main():
             fig.savefig(p, dpi=150)
             plt.close(fig)
             print(f"  保存: {p}", file=sys.stderr)
+
+    if "efieldt" in kinds:
+        print("[efieldt] 時間変化する電場(電極+液滴空間電荷)を作成中 ...",
+              file=sys.stderr)
+        res = read_flow_phi(args.flow)
+        if res is None:
+            print(f"  {args.flow} が読めないのでスキップ", file=sys.stderr)
+        else:
+            Xf, Yf, PHI = res
+            s = 10
+            Xc, Zc, PHc = Xf[::s, ::s], Yf[::s, ::s], PHI[::s, ::s]
+            xc1, zc1 = Xc[0, :], Zc[:, 0]
+            dpz, dpx = np.gradient(PHc, zc1, xc1)
+            Eex, Eez = -dpx, -dpz               # 電極(静的)場
+            soft = (xc1[1] - xc1[0]) * 0.6
+            # 色スケールは最終フレーム（液滴が最も多い）の空間電荷場で固定
+            xq, yq, dq, cq = active(vns, frames[-1])
+            if len(xq):
+                e0x, e0z = efield_from_charges(xq, yq, droplet_charge(dq),
+                                               Xc, Zc, xlen_m, soft)
+                E0 = np.sqrt(e0x ** 2 + e0z ** 2)
+                pos = E0[np.isfinite(E0) & (E0 > 0)]
+                vmax = float(np.percentile(pos, 99)) if pos.size else 1.e4
+            else:
+                vmax = 1.e4
+            vmin = vmax / 1e3
+            levels = np.logspace(np.log10(vmin), np.log10(vmax), 12)
+            fig = plt.figure(figsize=(7.0, 4.6))
+            ax = fig.add_axes([0.09, 0.14, 0.78, 0.74])
+            cax = fig.add_axes([0.90, 0.14, 0.02, 0.74])
+            sm = ScalarMappable(norm=LogNorm(vmin, vmax), cmap="plasma")
+            sm.set_array([])
+            fig.colorbar(sm, cax=cax, label="|E| [V/m]")
+
+            def updE(kk):
+                ax.clear()
+                xp, yp, dp, clt = active(vns, frames[kk])
+                if len(xp):
+                    Ex, Ez = efield_from_charges(xp, yp, droplet_charge(dp),
+                                                 Xc, Zc, xlen_m, soft)
+                else:
+                    Ex = np.zeros_like(Xc)
+                    Ez = np.zeros_like(Xc)
+                Em = np.clip(np.sqrt(Ex ** 2 + Ez ** 2), vmin, vmax)
+                ax.contourf(xc1 * 1e3, zc1 * 1e3, Em, levels=levels,
+                            cmap="plasma", norm=LogNorm(vmin, vmax),
+                            extend="both", zorder=1)
+                try:
+                    ax.streamplot(xc1 * 1e3, zc1 * 1e3, Ex, Ez, color="white",
+                                  density=1.0, linewidth=0.5, arrowsize=0.7)
+                except Exception:
+                    pass
+                if len(xp):
+                    ax.scatter(xp * 1e3, yp * 1e3, s=2, c="cyan", alpha=0.4,
+                               zorder=3)
+                draw_geometry(ax, xlen_m)
+                ax.set_xlim(0, xlen_m * 1e3)
+                ax.set_ylim(*zlim)
+                ax.set_xlabel(L["r"])
+                ax.set_ylabel(L["z"])
+                t = "液滴(空間電荷)がつくる電場 |E|" if JP \
+                    else "|E| from droplet space charge"
+                fig.suptitle(f'{t}   ({L["step"]}={frames[kk]["istp"]})',
+                             y=0.98)
+                return []
+
+            anim = animation.FuncAnimation(fig, updE, frames=len(frames),
+                                           blit=False)
+            mp4 = os.path.join(args.outdir, "efield_animation.mp4")
+            try:
+                anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
+                          bitrate=2400), dpi=130)
+                print(f"  保存: {mp4}", file=sys.stderr)
+            except Exception as e:
+                gif = os.path.join(args.outdir, "efield_animation.gif")
+                print(f"  MP4不可({e})->GIF", file=sys.stderr)
+                anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
+                          dpi=100)
+                print(f"  保存: {gif}", file=sys.stderr)
+            plt.close(fig)
 
     print("完了。出力先: " + os.path.abspath(args.outdir), file=sys.stderr)
 
