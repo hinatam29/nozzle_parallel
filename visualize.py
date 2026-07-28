@@ -514,8 +514,11 @@ def main():
                 except Exception:
                     pass
                 if len(xp):
-                    ax.scatter(xp * 1e3, yp * 1e3, s=2, c="cyan", alpha=0.4,
-                               zorder=3)
+                    ax.scatter(xp * 1e3, yp * 1e3, s=2, c="cyan", alpha=0.5,
+                               zorder=3,
+                               label="液滴の位置" if JP else "droplets")
+                    ax.legend(loc="upper right", fontsize=8, framealpha=0.75,
+                              markerscale=4)
                 draw_geometry(ax, xlen_m)
                 ax.set_xlim(0, xlen_m * 1e3)
                 ax.set_ylim(*zlim)
