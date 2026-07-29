@@ -61,8 +61,8 @@ c     sigg = 1.4
 c     vanode = 0.7e3
 c     vanode = 1.
 c     vanode = -6.e3
-c     vanode = 3.e3
-      vanode = 7.e3
+c     vanode = 7.e3
+      vanode = 3.e3
 c     vanode = 0.01e3
 c     vanode = 1.e3
 
