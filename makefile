@@ -6,13 +6,13 @@ CAL = main.o geo.o initial.o bound.o advect.o cipcsl3x.o cipcsl3y.o TECSIAx.o TE
 
 #
 tpfexp :  ${CAL}
-	gfortran -o go.out ${CAL}
+	gfortran -fopenmp -o go.out ${CAL}
 #
 .f.o :
 #
 #	ifort -c -O3 -autodouble -fpe0 -traceback -check all -g $*.f
 #	ifort -c -O3 -autodouble $*.f
-	gfortran -c -O3 -fdefault-real-8 -std=legacy -fallow-argument-mismatch $*.f
+	gfortran -c -O3 -fopenmp -fdefault-real-8 -std=legacy -fallow-argument-mismatch $*.f
 #
 ${CAL}: subcom.inc
 clean: 

@@ -9,6 +9,9 @@
       real ftx1(100000), fty1(100000)
       real ftxt1(100000), ftyt1(100000)
 c     real ftxt(100000), ftyt(100000)
+c     --- OpenMP用スカラー作業変数（並列化のためのプライベート変数）---
+      real rxs, rys, rr1s, rr3s, ftxs, ftys
+      real rx1s, ry1s, rr2s, rr6s, ftx1s, fty1s
 
       eps0 = 8.8542e-12
       epsil = 10.
@@ -59,87 +62,89 @@ c     q(k) = sqrt( q(k) )
 
 c     --- relative position ---
 
+c$omp parallel do private(l,rxs,rys,rr1s,rr3s,ftxs,ftys)
       do 10 k=1, ip
       do 20 l=1, ip
 
 c     if( l .ne. k )then
       if( l .eq. k )then
 
-      ftx(l) = 0.
-      fty(l) = 0.
+c     （自分自身は寄与なし）
 
       else
 
-      rx(l) = xp(k) - xp(l)
-      ry(l) = yp(k) - yp(l)
-      
-      rr1(l) = sqrt( rx(l)*rx(l) + ry(l)*ry(l) )
+      rxs = xp(k) - xp(l)
+      rys = yp(k) - yp(l)
 
-          if( rr1(l) .le. dp(k)+dp(l) )then
-          rr1(l) = dp(k) + dp(l)
+      rr1s = sqrt( rxs*rxs + rys*rys )
+
+          if( rr1s .le. dp(k)+dp(l) )then
+          rr1s = dp(k) + dp(l)
           else
-          rr1(l) = rr1(l)
+          rr1s = rr1s
           end if
 
 c     --- intraction ---
 
-      rr3(l) = rr1(l)*rr1(l)*rr1(l)
+      rr3s = rr1s*rr1s*rr1s
 
 
-      ftx(l) = q(l) / rr3(l) 
-      ftx(l) = ftx(l)*( xp(k) - xp(l) )
+      ftxs = q(l) / rr3s
+      ftxs = ftxs*( xp(k) - xp(l) )
 
 
-      fty(l) = q(l) / rr3(l)
-      fty(l) = fty(l)*( yp(k) - yp(l) )
+      ftys = q(l) / rr3s
+      ftys = ftys*( yp(k) - yp(l) )
 
 
-      ftxt(k) = ftxt(k) + ftx(l)
-      ftyt(k) = ftyt(k) + fty(l)
+      ftxt(k) = ftxt(k) + ftxs
+      ftyt(k) = ftyt(k) + ftys
 
       end if
 
  20   continue
  10   continue
+c$omp end parallel do
 
 
 
+c$omp parallel do private(l,rx1s,ry1s,rr2s,rr6s,ftx1s,fty1s)
       do 22 k=1, ip
       do 24 l=1, ip
 
       if( l .eq. k )then
 
-      ftx1(l) = 0.
-      fty1(l) = 0.
+c     （自分自身は寄与なし）
 
       else
 
-      rx1(l) = xp(k) + xp(l)
-      ry1(l) = yp(k) - yp(l)
+      rx1s = xp(k) + xp(l)
+      ry1s = yp(k) - yp(l)
 
-      rr2(l) = sqrt( rx1(l)*rx1(l) + ry1(l)*ry1(l) )
+      rr2s = sqrt( rx1s*rx1s + ry1s*ry1s )
 
-          if( rr2(l) .le. dp(k)+dp(l) )then
-          rr2(l) = dp(k) + dp(l)
+          if( rr2s .le. dp(k)+dp(l) )then
+          rr2s = dp(k) + dp(l)
           else
-          rr2(l) = rr2(l)
+          rr2s = rr2s
           end if
 
-      rr6(l) = rr2(l)*rr2(l)*rr2(l)
+      rr6s = rr2s*rr2s*rr2s
 
-      ftx1(l) = q(l) / rr6(l)
-      ftx1(l) = ftx1(l)*( xp(k) + xp(l) )
+      ftx1s = q(l) / rr6s
+      ftx1s = ftx1s*( xp(k) + xp(l) )
 
-      fty1(l) = q(l) / rr6(l)
-      fty1(l) = fty1(l)*( yp(k) - yp(l) )
+      fty1s = q(l) / rr6s
+      fty1s = fty1s*( yp(k) - yp(l) )
 
-      ftxt1(k) = ftxt1(k) + ftx1(l)
-      ftyt1(k) = ftyt1(k) + fty1(l)
+      ftxt1(k) = ftxt1(k) + ftx1s
+      ftyt1(k) = ftyt1(k) + fty1s
 
       end if
 
  24   continue
- 22   continue      
+ 22   continue
+c$omp end parallel do
 
 
       do 26 k=1, ip
@@ -156,6 +161,7 @@ c     image of particle l is located at ( 2*xlen - xp(l) )
 c     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔）
       xlen = 1.6e-2
 
+c$omp parallel do private(l,rx2,ry2,rr2r,rr3r)
       do 27 k=1, ip
       do 28 l=1, ip
 
@@ -179,6 +185,7 @@ c     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔�
 
  28   continue
  27   continue
+c$omp end parallel do
 
 
       do 30 k=1, ip
