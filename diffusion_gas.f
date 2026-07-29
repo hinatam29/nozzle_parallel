@@ -40,6 +40,11 @@ c      ------ particle position search ------
  13    continue
  14    continue
 
+c      両端で有効な内部セルに収める（左右対称化。左端 inex=0 の無効参照を防ぐ）
+       if( inex(k) .lt. 1. ) inex(k) = 1.
+       if( inex(k) .gt. nx-2 ) inex(k) = nx-2
+       if( jnex(k) .lt. 1. ) jnex(k) = 1.
+       if( jnex(k) .gt. ny-2 ) jnex(k) = ny-2
 
  10    continue
 
