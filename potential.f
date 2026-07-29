@@ -634,7 +634,22 @@ c
          ijk = jj(i,k)
          phi(ijk) = XX(ijk)
  1000 continue
-      
+
+c     ----- 左右対称化 -----
+c     配置は左右対称(同一ノズル・同電圧)なので真の解も左右対称。
+c     反復ソルバが残す左右非対称の数値誤差を、鏡像 i<->nx-i の
+c     平均で除去する。（左右非対称な設定にする場合はこのループを外す）
+      do 1100 k=1, ny-1
+      do 1100 i=1, nx-1
+         im = nx - i
+         if( im .gt. i )then
+            ijk1 = jj(i,k)
+            ijk2 = jj(im,k)
+            ph = 0.5*( phi(ijk1) + phi(ijk2) )
+            phi(ijk1) = ph
+            phi(ijk2) = ph
+         end if
+ 1100 continue
 
       return
       end
