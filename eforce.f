@@ -37,6 +37,7 @@ c       vq(k) = vq(k) / rhol
 
         vq(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
         vq(k) = pi*sqrt( vq(k) )
+        vq(k) = 0.8 * vq(k)    ! 限界帯電量の80%（70%にするなら 0.7）
         vq(k) = vq(k) / vp(k)
         vq(k) = vq(k) / rhol
 

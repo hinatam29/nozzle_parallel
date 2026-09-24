@@ -62,8 +62,9 @@ c     vanode = 0.7e3
 c     vanode = 1.
 c     vanode = -6.e3
 c     vanode = 7.e3
-c     vanode = 3.e3     ! 旧: 3kV（電極下に粒子が回り込まなかった）
-      vanode = 2.4e3    ! 電場を20%弱める。粒子が電極下に届かなければさらに下げる
+c     vanode = 3.e3     ! 旧: 3kV
+c     vanode = 2.4e3    ! 旧: 2.4kV
+      vanode = 7.e3     ! 7kV（帯電量を限界の80%に下げた条件での計算）
 c     vanode = 0.01e3
 c     vanode = 1.e3
 

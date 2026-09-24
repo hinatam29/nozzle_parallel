@@ -38,6 +38,7 @@ c     q(k) = sqrt( q(k) )
 
       q(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
       q(k) = pi*sqrt( q(k) )
+      q(k) = 0.8 * q(k)      ! 限界帯電量の80%（70%にするなら 0.7）
 
       end if
 
@@ -208,6 +209,7 @@ c     write(*,*) vq(k)
 
       vq(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
       vq(k) = pi*sqrt( vq(k) )
+      vq(k) = 0.8 * vq(k)    ! 限界帯電量の80%（70%にするなら 0.7）
       vq(k) = vq(k) / vp(k)
       vq(k) = vq(k) / rhol
 
