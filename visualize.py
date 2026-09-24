@@ -41,6 +41,7 @@ from matplotlib.cm import ScalarMappable
 
 # ---- 幾何形状（geo.f と対応、単位 m）。xlen はデータから自動判定 ------
 YLEN = 0.1
+XLEN = 1.6e-2       # ノズル間隔（geo.f と同じ。推定に失敗した時の既定値）
 XNOZ = 0.4e-3       # ノズル半径方向幅
 YNOZ = 1.0e-3       # ノズル軸方向長さ（上端から）
 XHOL = 5.0e-3       # 対向電極の穴（各ノズル側 XHOL 幅）
@@ -151,7 +152,11 @@ def infer_xlen(varnames, frames):
         xp, _, _, _ = active(varnames, fr)
         if len(xp):
             mx = max(mx, float(xp.max()))
-    return mx if mx > 0 else 0.1
+    # 計算初期は粒子がノズル近く(x≈0)にしかおらず推定が不正確になる。
+    # 妥当な範囲(1mm〜1m)でなければ既知のノズル間隔 XLEN を使う。
+    if mx < 1.0e-3 or mx > 1.0:
+        return XLEN
+    return mx
 
 
 # ---- 灰色の四角（ノズル1・ノズル2・対向電極）---------------------------
