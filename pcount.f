@@ -148,10 +148,12 @@ c           end if
 
 c      ------ counter electrode ------
 
-c      if( xp(k) .ge. xhol  .and.  yp(k) .ge. yhol2
-c    &     .and.  yp(k) .le. yhol1 )then
-
-       if( i .ge. ihol  .and.  j .ge. jhol2  .and.  j .le. jhol1 )then
+c      並列版: 対向電極は xhol ≤ xp ≤ xlen-xhol が固体(両側に穴)
+c      旧: 未定義スカラー i,j を使用(単ノズル版から継承したバグ)
+c      if( i .ge. ihol  .and.  j .ge. jhol2  .and.  j .le. jhol1 )then
+       if( xp(k) .ge. xhol  .and.  xp(k) .le. xlen-xhol
+     &     .and.  yp(k) .ge. yhol2
+     &     .and.  yp(k) .le. yhol1 )then
 
        pout(k) = 1.
 c      write(*,*) k
