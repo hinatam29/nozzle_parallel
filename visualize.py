@@ -378,6 +378,8 @@ def main():
     ap.add_argument("--fps", type=int, default=8)
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--max-frames", type=int, default=None)
+    ap.add_argument("--gif", action="store_true",
+                    help="MP4を作らず必ずGIFのみ出力し、--kind all に efieldt も含める")
     args = ap.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -401,6 +403,8 @@ def main():
 
     if args.kind == "all":
         kinds = ["spread", "absorb", "efield"]
+        if args.gif:
+            kinds.append("efieldt")
     elif args.kind == "both":
         kinds = ["spread", "absorb"]
     else:
@@ -431,17 +435,22 @@ def main():
 
             anim = animation.FuncAnimation(fig, upd, frames=len(frames),
                                            blit=False)
+            gif = os.path.join(args.outdir, f"{kd}_animation.gif")
             mp4 = os.path.join(args.outdir, f"{kd}_animation.mp4")
-            try:
-                anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
-                          bitrate=2400), dpi=140)
-                print(f"  保存: {mp4}", file=sys.stderr)
-            except Exception as e:
-                gif = os.path.join(args.outdir, f"{kd}_animation.gif")
-                print(f"  MP4不可({e})->GIF", file=sys.stderr)
+            if args.gif:
                 anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
                           dpi=100)
                 print(f"  保存: {gif}", file=sys.stderr)
+            else:
+                try:
+                    anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
+                              bitrate=2400), dpi=140)
+                    print(f"  保存: {mp4}", file=sys.stderr)
+                except Exception as e:
+                    print(f"  MP4不可({e})->GIF", file=sys.stderr)
+                    anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
+                              dpi=100)
+                    print(f"  保存: {gif}", file=sys.stderr)
             plt.close(fig)
 
     if "efield" in kinds:
@@ -537,17 +546,22 @@ def main():
 
             anim = animation.FuncAnimation(fig, updE, frames=len(frames),
                                            blit=False)
+            gif = os.path.join(args.outdir, "efield_animation.gif")
             mp4 = os.path.join(args.outdir, "efield_animation.mp4")
-            try:
-                anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
-                          bitrate=2400), dpi=130)
-                print(f"  保存: {mp4}", file=sys.stderr)
-            except Exception as e:
-                gif = os.path.join(args.outdir, "efield_animation.gif")
-                print(f"  MP4不可({e})->GIF", file=sys.stderr)
+            if args.gif:
                 anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
                           dpi=100)
                 print(f"  保存: {gif}", file=sys.stderr)
+            else:
+                try:
+                    anim.save(mp4, writer=animation.FFMpegWriter(fps=args.fps,
+                              bitrate=2400), dpi=130)
+                    print(f"  保存: {mp4}", file=sys.stderr)
+                except Exception as e:
+                    print(f"  MP4不可({e})->GIF", file=sys.stderr)
+                    anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
+                              dpi=100)
+                    print(f"  保存: {gif}", file=sys.stderr)
             plt.close(fig)
 
     print("完了。出力先: " + os.path.abspath(args.outdir), file=sys.stderr)
