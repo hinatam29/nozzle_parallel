@@ -61,10 +61,9 @@ c     sigg = 1.4
 c     vanode = 0.7e3
 c     vanode = 1.
 c     vanode = -6.e3
-c     vanode = 7.e3
-c     vanode = 3.e3     ! 旧: 3kV
+c     vanode = 7.e3     ! 旧: 7kV(電極下の逆向き電場が強すぎ、液滴がz=92で反射)
 c     vanode = 2.4e3    ! 旧: 2.4kV
-      vanode = 7.e3     ! 7kV（帯電量を限界の80%に下げた条件での計算）
+      vanode = 3.e3     ! 3kV(川谷さん版と同条件。pcount.fのバグ修正後の再試験)
 c     vanode = 0.01e3
 c     vanode = 1.e3
 
