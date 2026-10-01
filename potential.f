@@ -403,7 +403,7 @@ c     --- inside nozzle ---
          ijk = jj(i,k)
          A(ijk,5) = 1.0
 c        B(ijk) = vanode   ! 旧: ノズル +7kV
-         B(ijk) = 0.       ! ノズルは接地(0V)
+         B(ijk) = vanode   ! ノズル +V（川谷さん版・実験と同じ向き。電極を0Vにして電位計算の収束誤差を防ぐ）
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -443,7 +443,7 @@ c     --- inside nozzle 2 ---
          ijk = jj(i,k)
          A(ijk,5) = 1.0
 c        B(ijk) = vanode   ! 旧: ノズル +7kV
-         B(ijk) = 0.       ! ノズルは接地(0V)
+         B(ijk) = vanode   ! ノズル +V（川谷さん版・実験と同じ向き。電極を0Vにして電位計算の収束誤差を防ぐ）
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -514,7 +514,7 @@ c     --- inside ---
          ijk = jj(i,k)
          A(ijk,5) = 1.0
 c        B(ijk) = 0.        ! 旧: 対向電極 接地
-         B(ijk) = -vanode   ! 対向電極 -7kV
+         B(ijk) = 0.        ! 対向電極は接地(0V)。旧: -vanode だと電極下の電位が収束せず逆向き電場が出た
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
