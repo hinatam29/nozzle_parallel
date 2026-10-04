@@ -311,15 +311,18 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
     dpz, dpx = np.gradient(PHI, zc, xc)
     Ex, Ez = -dpx, -dpz
     Emag = np.sqrt(Ex * Ex + Ez * Ez)
-    pos = Emag[np.isfinite(Emag) & (Emag > 0)]
-    vmax = float(np.percentile(pos, 99)) if pos.size else 1.0
-    vmin = vmax / 1e3
-    levels = np.logspace(np.log10(vmin), np.log10(vmax), 12)
+    # 色の目盛りは固定(どの計算でも同じ色=同じ値で比較できるように)。
+    # 10 V/m 〜 1e7 V/m を 0.5 桁刻みで塗り分ける。
+    vmin, vmax = EF_VMIN, EF_VMAX
+    levels = 10.0 ** np.arange(np.log10(vmin), np.log10(vmax) + 0.01, 0.5)
     Ep = np.clip(np.nan_to_num(Emag, nan=vmin), vmin, vmax)
     cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap="viridis",
                      norm=LogNorm(vmin, vmax), extend="both", zorder=1)
+    # 電気力線: 電場が vmin より弱い所は向きが数値誤差で決まるので描かない
+    weak = Emag < vmin
     try:
-        ax.streamplot(xc * 1e3, zc * 1e3, Ex, Ez, color="white",
+        ax.streamplot(xc * 1e3, zc * 1e3, np.ma.masked_where(weak, Ex),
+                      np.ma.masked_where(weak, Ez), color="white",
                       density=1.1, linewidth=0.5, arrowsize=0.7)
     except Exception:
         pass
@@ -328,6 +331,17 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
 
 
 EPS0 = 8.8542e-12
+EF_VMIN, EF_VMAX = 1.0e1, 1.0e7   # 電場図の色の範囲 [V/m]（固定）
+
+
+def efield_colorbar(fig, cf, cax):
+    """電場図のカラーバー: 1桁ごとに 10^n V/m の目盛りと単位を付ける。"""
+    ticks = 10.0 ** np.arange(np.log10(EF_VMIN), np.log10(EF_VMAX) + 0.01)
+    cb = fig.colorbar(cf, cax=cax, ticks=ticks)
+    cb.ax.set_yticklabels([f"$10^{{{int(round(np.log10(t)))}}}$" for t in ticks])
+    cb.ax.minorticks_off()
+    cb.set_label("電場の強さ |E| [V/m]" if JP else "|E| [V/m]")
+    return cb
 FS_SURF = 42.9e-3          # 表面張力（intraction.f と同じ）
 
 
@@ -470,9 +484,9 @@ def main():
             ax.set_ylabel(L["z"])
             fig.suptitle("電場分布 |E| と電気力線" if JP
                          else "Electric field |E| and field lines", y=0.98)
-            fig.colorbar(cf, cax=cax, label="|E| [V/m]")
+            efield_colorbar(fig, cf, cax)
             p = os.path.join(args.outdir, "efield_field.png")
-            fig.savefig(p, dpi=150)
+            fig.savefig(p, dpi=150, bbox_inches="tight")
             plt.close(fig)
             print(f"  保存: {p}", file=sys.stderr)
 
