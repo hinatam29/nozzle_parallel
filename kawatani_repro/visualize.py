@@ -308,16 +308,25 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
     dpz, dpx = np.gradient(PHI, zc, xc)
     Ex, Ez = -dpx, -dpz
     Emag = np.sqrt(Ex * Ex + Ez * Ez)
-    pos = Emag[np.isfinite(Emag) & (Emag > 0)]
-    vmax = float(np.percentile(pos, 99)) if pos.size else 1.0
-    vmin = vmax / 1e3
-    levels = np.logspace(np.log10(vmin), np.log10(vmax), 12)
-    Ep = np.clip(np.nan_to_num(Emag, nan=vmin), vmin, vmax)
-    cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap="viridis",
-                     norm=LogNorm(vmin, vmax), extend="both", zorder=1)
+    # 色の目盛りは固定(並列版 kawatani/visualize.py と同じ。同じ色=同じ値)。
+    # 10 V/m 〜 1e7 V/m を 0.5 桁刻みで塗り分ける。
+    levels = 10.0 ** np.arange(np.log10(EF_VMIN), np.log10(EF_VMAX) + 0.01, 0.5)
+    Ep = np.nan_to_num(Emag, nan=0.0)          # 範囲外は under/over 色で塗る
+    cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap=EF_CMAP,
+                     norm=BoundaryNorm(levels, EF_CMAP.N), extend="both",
+                     zorder=1)
+    # 電気力線: 電場が EF_VMIN より弱い所は向きが数値誤差で決まるので描かない
+    weak = Emag < EF_VMIN
+    # 1ノズル版: 領域幅100mmのうち表示する軸付近(r<=10mm, z>=80mm)だけで
+    # 電気力線を引く(全体で引くと表示範囲にほとんど線が入らないため)
+    mx_ = xc <= 10.0e-3
+    mz_ = zc >= 80.0e-3
+    sl = np.ix_(mz_, mx_)
     try:
-        ax.streamplot(xc * 1e3, zc * 1e3, Ex, Ez, color="white",
-                      density=1.1, linewidth=0.5, arrowsize=0.7)
+        ax.streamplot(xc[mx_] * 1e3, zc[mz_] * 1e3,
+                      np.ma.masked_where(weak[sl], Ex[sl]),
+                      np.ma.masked_where(weak[sl], Ez[sl]), color="black",
+                      density=1.1, linewidth=0.5, arrowsize=0.8)
     except Exception:
         pass
     draw_geometry(ax, xlen_m)
@@ -325,6 +334,23 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
 
 
 EPS0 = 8.8542e-12
+EF_VMIN, EF_VMAX = 1.0e1, 1.0e7   # 電場図の色の範囲 [V/m]（固定・並列版と同じ）
+# 電場図の色: 先行研究(川谷 修論 図3.2.5)と同じ「青→水色→緑→黄→橙→赤」の
+# 段階色。0.5桁ごとに1色(12色)。範囲外は 下=濃紺 / 上=マゼンタ。
+EF_COLORS = ["#0b1a8c", "#1f45d6", "#2f7fe8", "#35b5f2", "#00e0ff", "#00e6a8",
+             "#00c84a", "#3ce000", "#b0f000", "#ffd700", "#ff7a00", "#e8001e"]
+EF_CMAP = matplotlib.colors.ListedColormap(EF_COLORS).with_extremes(
+    under="#050a3c", over="#ff00c8")
+
+
+def efield_colorbar(fig, cf, cax):
+    """電場図のカラーバー: 1桁ごとに 10^n V/m の目盛りと単位を付ける。"""
+    ticks = 10.0 ** np.arange(np.log10(EF_VMIN), np.log10(EF_VMAX) + 0.01)
+    cb = fig.colorbar(cf, cax=cax, ticks=ticks)
+    cb.ax.set_yticklabels([f"$10^{{{int(round(np.log10(t)))}}}$" for t in ticks])
+    cb.ax.minorticks_off()
+    cb.set_label("電場の強さ |E| [V/m]" if JP else "|E| [V/m]")
+    return cb
 FS_SURF = 42.9e-3          # 表面張力（intraction.f と同じ）
 
 
@@ -467,9 +493,9 @@ def main():
             ax.set_ylabel(L["z"])
             fig.suptitle("電場分布 |E| と電気力線" if JP
                          else "Electric field |E| and field lines", y=0.98)
-            fig.colorbar(cf, cax=cax, label="|E| [V/m]")
+            efield_colorbar(fig, cf, cax)
             p = os.path.join(args.outdir, "efield_field.png")
-            fig.savefig(p, dpi=150)
+            fig.savefig(p, dpi=150, bbox_inches="tight")
             plt.close(fig)
             print(f"  保存: {p}", file=sys.stderr)
 
