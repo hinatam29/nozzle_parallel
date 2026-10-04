@@ -67,7 +67,7 @@ L = {
     "r": "r [mm]", "z": "z [mm]", "d": "d [m]", "ct": "C_total [mol]",
     "step": "ステップ" if JP else "step",
     "t_spread": "液滴の広がり" if JP else "Droplet spread",
-    "t_absorb": "二酸化炭素吸収" if JP else "CO2 absorption",
+    "t_absorb": "二酸化炭素吸収" if JP else "Carbon dioxide absorption",
 }
 D_LEVELS = np.arange(2.0, 8.5, 0.5) * 1e-7   # 2E-7 .. 8E-7（先行研究準拠）
 
@@ -171,7 +171,28 @@ def draw_geometry(ax, xlen_m):
     rect(XHOL * 1e3, xl, ze0, ze1)                     # 対向電極(軸まわりに穴)
 
 
-# ---- C_total の格子集計 ----------------------------------------------
+# ---- C_total の色と階級（川谷 修論の C_total 図と同じ色の並び）--------------
+# 0 から上端までを10等分(10色、線形)。上端を超える値は赤、
+# 液滴がいない格子は背景の青。上端は並列版・1本版で共通の CT_TOP(--ctop で変更可)。
+CT_COLORS = ["#1e50ff", "#14a0ff", "#00d2ff", "#00f0c8", "#00e68c",
+             "#00d23c", "#8cf000", "#f0f000", "#ffb400", "#ff6400"]
+CT_CMAP = matplotlib.colors.ListedColormap(CT_COLORS).with_extremes(
+    under="#0000e6", over="#ff0000")
+CT_BIN_M = 2.0e-4   # C_total を集計する格子幅 0.2mm（計算格子・1本版と同じ）
+# 色の上端 [mol]。並列版(kawatani)と1本版(kawatani_repro)で同じ値にして、
+# 同じ色=同じ吸収量で比べられるようにする。t=11ms の最大値
+# (並列 4.5e-20, 1本 5.9e-20)が両方入る値。変えるときは両方のファイルをそろえる。
+CT_TOP = 6.0e-20
+
+
+def ct_levels(top):
+    """0 から top までを10等分した境界(=10色、線形)。
+    下端は 0 よりわずかに上にして、液滴のいない格子は背景色にする。"""
+    lv = top * np.linspace(0.0, 1.0, 11)
+    lv[0] = top * 1e-3
+    return lv
+
+
 def bin_ctotal(xp, yp, clt, xlen_m, zlim_m, bin_m):
     nx = max(int(xlen_m / bin_m), 4)
     nz = max(int((zlim_m[1] - zlim_m[0]) / bin_m), 4)
@@ -201,7 +222,7 @@ def plot_absorb(ax, vns, frame, xlen_m, zlim, bin_m, levels, norm):
     if len(xp):
         xc, yc, H = bin_ctotal(xp, yp, clt, xlen_m, zlim_m, bin_m)
         Hp = np.clip(H.T, levels[0] * 0.5, None)
-        ax.contourf(xc * 1e3, yc * 1e3, Hp, levels=levels, cmap="jet",
+        ax.contourf(xc * 1e3, yc * 1e3, Hp, levels=levels, cmap=CT_CMAP,
                     norm=norm, extend="both", zorder=2)
     draw_geometry(ax, xlen_m)
 
@@ -226,12 +247,28 @@ def build(kind, dual, xlen_m, norm, cmap, label):
                 fig.add_axes([0.47, 0.10, 0.34, 0.78])]
         cax = fig.add_axes([0.86, 0.10, 0.025, 0.78])
     else:
-        fig = plt.figure(figsize=(4.6, 6.0))
-        axes = [fig.add_axes([0.16, 0.10, 0.60, 0.80])]
-        cax = fig.add_axes([0.80, 0.10, 0.04, 0.80])
+        fig = plt.figure(figsize=(4.8, 6.0))
+        # 右側にカラーバーの目盛り文字と単位が収まる余白を残す
+        axes = [fig.add_axes([0.15, 0.08, 0.57, 0.80])]
+        cax = fig.add_axes([0.76, 0.08, 0.04, 0.74])
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    fig.colorbar(sm, cax=cax, label=label)   # 固定：以後は再作成しない
+    if kind == "absorb":
+        # 境界ごとに値を書き、共通の桁(x10^n)と単位はカラーバーの上に置く
+        b = norm.boundaries
+        cb = fig.colorbar(sm, cax=cax, extend="max")
+        from matplotlib.ticker import FixedLocator, FixedFormatter
+        e = int(np.floor(np.log10(b[-1]) + 1e-9))
+        cb.locator = FixedLocator(b)
+        cb.formatter = FixedFormatter(
+            ["0"] + [f"{v / 10.0 ** e:.1f}" for v in b[1:]])
+        cb.update_ticks()
+        cb.ax.tick_params(labelsize=8)
+        cb.ax.minorticks_off()
+        cb.ax.set_title(f"$C_{{total}}$\n[$\\times10^{{{e}}}$ mol]",
+                        fontsize=9, pad=8, loc="left")
+    else:
+        fig.colorbar(sm, cax=cax, label=label)   # 固定：以後は再作成しない
     return fig, axes
 
 
@@ -401,6 +438,8 @@ def main():
     ap.add_argument("--fps", type=int, default=8)
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--max-frames", type=int, default=None)
+    ap.add_argument("--ctop", type=float, default=None,
+                    help="二酸化炭素吸収図の色の上端 [mol](既定 CT_TOP=6e-20。例 4e-20)")
     ap.add_argument("--gif", action="store_true",
                     help="MP4を作らず必ずGIFのみ出力し、--kind all に efieldt も含める")
     args = ap.parse_args()
@@ -417,12 +456,13 @@ def main():
     zlim = (args.zmin, args.zmax)
     bin_m = BIN_M
     cmax = clt_cmax(vns, frames, xlen_m, zlim, bin_m)
-    levels = np.logspace(np.log10(cmax) - 3, np.log10(cmax), 12) \
-        if cmax > 0 else np.logspace(-24, -21, 12)
+    # 色の上端: 並列版・1本版で共通の CT_TOP。--ctop を付けたときだけ変える。
+    ctop = args.ctop if args.ctop else CT_TOP
+    levels = ct_levels(ctop)
     norm_s = BoundaryNorm(D_LEVELS, plt.cm.jet.N, extend="both")
-    norm_a = LogNorm(levels[0], levels[-1])
+    norm_a = BoundaryNorm(levels, CT_CMAP.N)
     print(f"  ノズル間隔(xlen)={xlen_m*1e3:.1f}mm, z={zlim}mm, "
-          f"C_total上限={cmax:.2e}", file=sys.stderr)
+          f"C_total最大={cmax:.2e}, 色の上端={levels[-1]:.0e}", file=sys.stderr)
 
     if args.kind == "all":
         kinds = ["spread", "absorb", "efield"]
@@ -437,7 +477,8 @@ def main():
         label = L["d"] if kd == "spread" else L["ct"]
         print(f"[{kd}] 作成中 ...", file=sys.stderr)
         if args.mode in ("snap", "both"):
-            fig, axes = build(kd, args.dual, xlen_m, norm, plt.cm.jet, label)
+            fig, axes = build(kd, args.dual, xlen_m, norm,
+                              plt.cm.jet if kd == "spread" else CT_CMAP, label)
             picks = np.unique(np.linspace(0, len(frames) - 1,
                               min(args.nsnap, len(frames))).astype(int))
             for k in picks:
@@ -449,7 +490,8 @@ def main():
                 print(f"  保存: {p}", file=sys.stderr)
             plt.close(fig)
         if args.mode in ("anim", "both"):
-            fig, axes = build(kd, args.dual, xlen_m, norm, plt.cm.jet, label)
+            fig, axes = build(kd, args.dual, xlen_m, norm,
+                              plt.cm.jet if kd == "spread" else CT_CMAP, label)
 
             def upd(k, kd=kd, fig=fig, axes=axes, norm=norm):
                 render(fig, axes, kd, vns, frames[k], xlen_m, zlim,
