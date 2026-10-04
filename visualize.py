@@ -316,14 +316,16 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
     vmin, vmax = EF_VMIN, EF_VMAX
     levels = 10.0 ** np.arange(np.log10(vmin), np.log10(vmax) + 0.01, 0.5)
     Ep = np.clip(np.nan_to_num(Emag, nan=vmin), vmin, vmax)
-    cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap="viridis",
-                     norm=LogNorm(vmin, vmax), extend="both", zorder=1)
+    Ep = np.nan_to_num(Emag, nan=0.0)          # 範囲外は under/over 色で塗る
+    cf = ax.contourf(xc * 1e3, zc * 1e3, Ep, levels=levels, cmap=EF_CMAP,
+                     norm=BoundaryNorm(levels, EF_CMAP.N), extend="both",
+                     zorder=1)
     # 電気力線: 電場が vmin より弱い所は向きが数値誤差で決まるので描かない
     weak = Emag < vmin
     try:
         ax.streamplot(xc * 1e3, zc * 1e3, np.ma.masked_where(weak, Ex),
-                      np.ma.masked_where(weak, Ez), color="white",
-                      density=1.1, linewidth=0.5, arrowsize=0.7)
+                      np.ma.masked_where(weak, Ez), color="black",
+                      density=1.1, linewidth=0.5, arrowsize=0.8)
     except Exception:
         pass
     draw_geometry(ax, xlen_m)
@@ -332,6 +334,12 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
 
 EPS0 = 8.8542e-12
 EF_VMIN, EF_VMAX = 1.0e1, 1.0e7   # 電場図の色の範囲 [V/m]（固定）
+# 電場図の色: 先行研究(川谷 修論 図3.2.5)と同じ「青→水色→緑→黄→橙→赤」の
+# 段階色。0.5桁ごとに1色(12色)。範囲外は 下=濃紺 / 上=マゼンタ。
+EF_COLORS = ["#0b1a8c", "#1f45d6", "#2f7fe8", "#35b5f2", "#00e0ff", "#00e6a8",
+             "#00c84a", "#3ce000", "#b0f000", "#ffd700", "#ff7a00", "#e8001e"]
+EF_CMAP = matplotlib.colors.ListedColormap(EF_COLORS).with_extremes(
+    under="#050a3c", over="#ff00c8")
 
 
 def efield_colorbar(fig, cf, cax):
