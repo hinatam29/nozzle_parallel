@@ -38,7 +38,7 @@ c     q(k) = sqrt( q(k) )
 
       q(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
       q(k) = pi*sqrt( q(k) )
-c     q(k) = 0.8 * q(k)      ! 旧: 限界帯電量の80%。現在は限界帯電量(100%)
+c     q(k) = 0.8 * q(k)      ! 川谷条件: レイリー限界100%(80%倍率を外す)
 
       end if
 
@@ -156,37 +156,38 @@ c$omp end parallel do
  26   continue
 
 
-c     --- image charge across right mirror plane (x=xlen, nozzle 2) ---
-c     image of particle l is located at ( 2*xlen - xp(l) )
+c     （1ノズル・川谷条件: 右鏡面 x=xlen の鏡像項は無し）
+cc     --- image charge across right mirror plane (x=xlen, nozzle 2) ---
+cc     image of particle l is located at ( 2*xlen - xp(l) )
 
-c     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔）
-      xlen = 1.6e-2
+cc     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔）
+c     xlen = 1.6e-2
 
-c$omp parallel do private(l,rx2,ry2,rr2r,rr3r)
-      do 27 k=1, ip
-      do 28 l=1, ip
+cc$omp parallel do private(l,rx2,ry2,rr2r,rr3r)
+c     do 27 k=1, ip
+c     do 28 l=1, ip
 
-      if( l .ne. k )then
+c     if( l .ne. k )then
 
-      rx2 = xp(k) + xp(l) - 2.*xlen
-      ry2 = yp(k) - yp(l)
+c     rx2 = xp(k) + xp(l) - 2.*xlen
+c     ry2 = yp(k) - yp(l)
 
-      rr2r = sqrt( rx2*rx2 + ry2*ry2 )
+c     rr2r = sqrt( rx2*rx2 + ry2*ry2 )
 
-          if( rr2r .le. dp(k)+dp(l) )then
-          rr2r = dp(k) + dp(l)
-          end if
+c         if( rr2r .le. dp(k)+dp(l) )then
+c         rr2r = dp(k) + dp(l)
+c         end if
 
-      rr3r = rr2r*rr2r*rr2r
+c     rr3r = rr2r*rr2r*rr2r
 
-      ftxt(k) = ftxt(k) + q(l)/rr3r*rx2
-      ftyt(k) = ftyt(k) + q(l)/rr3r*ry2
+c     ftxt(k) = ftxt(k) + q(l)/rr3r*rx2
+c     ftyt(k) = ftyt(k) + q(l)/rr3r*ry2
 
-      end if
+c     end if
 
- 28   continue
- 27   continue
-c$omp end parallel do
+c28   continue
+c27   continue
+cc$omp end parallel do
 
 
       do 30 k=1, ip
@@ -209,7 +210,7 @@ c     write(*,*) vq(k)
 
       vq(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
       vq(k) = pi*sqrt( vq(k) )
-c     vq(k) = 0.8 * vq(k)    ! 旧: 限界帯電量の80%。現在は限界帯電量(100%)
+c     vq(k) = 0.8 * vq(k)    ! 川谷条件: レイリー限界100%(80%倍率を外す)
       vq(k) = vq(k) / vp(k)
       vq(k) = vq(k) / rhol
 

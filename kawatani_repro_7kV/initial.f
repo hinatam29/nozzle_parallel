@@ -12,19 +12,9 @@ c     ip = 10
       pi = 4.*atan(1.)
 
 
-c     xlen = 2.e-2   旧。geo.f と同じ値にすること（ノズル間隔）
-      xlen = 1.6e-2
-
       do 10 k=1,ipmx
 
-c     --- inject alternately from 2 nozzles (parallel) ---
-c     odd  k : nozzle 1 (left, on axis  x=0)
-c     even k : nozzle 2 (right mirror plane x=xlen)
-      if( mod(k,2) .eq. 0 )then
-         xp(k) = xlen
-      else
-         xp(k) = 0.
-      end if
+      xp(k) = 0.
 c     xp(k) = 1.e-3
 c     xp(k) = 2.e-3
 c     yp(k) = 98.5e-3
@@ -34,8 +24,8 @@ c     uxp(k) = 2.
       uxp(k) = 0.
 c     uyp(k) = 0.
 c     uyp(k) = -9.
-c     uyp(k) = -2.4     ! 旧: 川谷さんのコードの値
-      uyp(k) = -3.0     ! 川谷修論 p.30 の初速度 (0, -3.0 m/s) に合わせる
+c     uyp(k) = -2.4
+      uyp(k) = -3.0     ! 川谷修論 初速度 (0, -3.0 m/s)
 c     uyp(k) = -2.5
 
  10   continue

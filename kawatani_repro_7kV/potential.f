@@ -37,7 +37,7 @@ c ----------------------------------------------------------------------
 
 
       ITR = 10000
-c     EPS = 1.0E-40   ! 到達不能な値。毎ステップ上限反復を回し切り極端に遅かった
+c     EPS = 1.0E-40   ! 到達不能。親フォルダ版と同じ高速化を適用
       EPS = 1.0E-6
       SGM = 0.0
  
@@ -61,10 +61,9 @@ c     sigg = 1.4
 c     vanode = 0.7e3
 c     vanode = 1.
 c     vanode = -6.e3
-c     vanode = 7.e3     ! 旧: 7kV(電極下の逆向き電場が強すぎ、液滴がz=92で反射)
-c     vanode = 2.4e3    ! 旧: 2.4kV
-c     vanode = 3.e3     ! 旧: 3kV
-      vanode = 7.e3     ! 7kV(ノズル+7kV / 対向電極0V)
+c     vanode = 3.e3
+c     vanode = 6.e3     ! 川谷修論 標準条件 V=6.0kV
+      vanode = 7.e3     ! 川谷条件のまま電圧だけ7kV（ノズル+7kV / 対向電極0V）
 c     vanode = 0.01e3
 c     vanode = 1.e3
 
@@ -212,9 +211,8 @@ c        diel = 0.5*( x(i,k)*epsi(i,k)
 c    &              + x(i+1,k)*epsi(i+1,k) )
 c        diel = 0.5*( x(i,k)
 c    &              + x(i+1,k) )
-c        円筒(2次元軸対称): diel = 0.5*(x(i,k)+x(i+1,k))*epsig*eps0
-c        平面2次元(デカルト xy): r重みなし
-         diel = epsig*eps0
+         diel = 0.5*( x(i,k)+x(i+1,k) )*epsig*eps0
+c        diel = 1.
 c        diel = 1.
          F1(ijk) = drs*diel
   240 continue
@@ -230,8 +228,8 @@ c
 
          xx2 = 0.5*(x(i+1,k) + x(i,k))
 
-c        rrkps = 1./xx2   ! 円筒(2次元軸対称): 1/r 係数
-         rrkps = 1.       ! 平面2次元(デカルト xy)
+         rrkps = 1./xx2
+c        rrkps = 1.
 c        drs = 0.5*(x(i+1,k) - x(i-1,k))
          drs = sdx1(i,k)
          drs = 1./drs
@@ -403,8 +401,8 @@ c     --- inside nozzle ---
       do 740 k=jnoz, ny-1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
-c        B(ijk) = vanode   ! 旧: ノズル +7kV
-         B(ijk) = vanode   ! ノズル +V（川谷さん版・実験と同じ向き。電極を0Vにして電位計算の収束誤差を防ぐ）
+c        B(ijk) = 0.
+         B(ijk) = vanode
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -412,49 +410,9 @@ c        B(ijk) = vanode   ! 旧: ノズル +7kV
          A(ijk,8) = 0.
   740 continue
 
-c     ------ nozzle 2 (mirror image, right boundary) ------
-c     --- bottom nozzle 2 ---
-      do 721 i=inoz2+1, nx-1
-         k = jnoz
-         ijk = jj(i,k)
-         A(ijk,5) = 1.0
-         A(ijk,6) = -1.0
-         B(ijk)   = 0.
-
-         A(ijk,2) = 0.
-         A(ijk,4) = 0.
-         A(ijk,8) = 0.
-  721 continue
-
-c     --- inside face of nozzle 2 ---
-      do 731 k=jnoz, ny-1
-         i = inoz2
-         ijk = jj(i,k)
-         A(ijk,5) = 1.0
-         A(ijk,8) = -1.0
-
-         A(ijk,2) = 0.
-         A(ijk,4) = 0.
-         A(ijk,6) = 0.
-  731 continue
-
-c     --- inside nozzle 2 ---
-      do 741 i=inoz2, nx-1
-      do 741 k=jnoz, ny-1
-         ijk = jj(i,k)
-         A(ijk,5) = 1.0
-c        B(ijk) = vanode   ! 旧: ノズル +7kV
-         B(ijk) = vanode   ! ノズル +V（川谷さん版・実験と同じ向き。電極を0Vにして電位計算の収束誤差を防ぐ）
-
-         A(ijk,2) = 0.
-         A(ijk,4) = 0.
-         A(ijk,6) = 0.
-         A(ijk,8) = 0.
-  741 continue
-
-c     ------ counter electrode (holes mirrored on both sides) ------
+c     ------ counter electrode ------
 c     --- bottom  ---
-      do 750 i=ihol, ihol2
+      do 750 i=ihol, nx-1
          k = jhol2
          ijk = jj(i,k)
          A(ijk,5) = 1.0
@@ -481,21 +439,8 @@ c     --- side ---
          A(ijk,2) = 0.
   760 continue
 
-c     --- side (right hole, mirror of do760) ---
-      do 761 k=jhol2, jhol1
-         i = ihol2
-         ijk = jj(i,k)
-         A(ijk,5) = 1.0
-         A(ijk,2) = -1.0
-         B(ijk)   = 0.
-
-         A(ijk,4) = 0.
-         A(ijk,6) = 0.
-         A(ijk,8) = 0.
-  761 continue
-
 c     --- top ---
-      do 770 i=ihol, ihol2
+      do 770 i=ihol, nx-1
          k = jhol1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
@@ -510,12 +455,12 @@ c        A(ijk,6) = 0.
   770 continue
 
 c     --- inside ---
-      do 780 i=ihol, ihol2
+      do 780 i=ihol, nx-1
       do 780 k=jhol2, jhol1
          ijk = jj(i,k)
          A(ijk,5) = 1.0
-c        B(ijk) = 0.        ! 旧: 対向電極 接地
-         B(ijk) = 0.        ! 対向電極は接地(0V)。旧: -vanode だと電極下の電位が収束せず逆向き電場が出た
+c        B(ijk) = vanode
+         B(ijk) = 0.
 
          A(ijk,2) = 0.
          A(ijk,4) = 0.
@@ -636,22 +581,7 @@ c
          ijk = jj(i,k)
          phi(ijk) = XX(ijk)
  1000 continue
-
-c     ----- 左右対称化 -----
-c     配置は左右対称(同一ノズル・同電圧)なので真の解も左右対称。
-c     反復ソルバが残す左右非対称の数値誤差を、鏡像 i<->nx-i の
-c     平均で除去する。（左右非対称な設定にする場合はこのループを外す）
-      do 1100 k=1, ny-1
-      do 1100 i=1, nx-1
-         im = nx - i
-         if( im .gt. i )then
-            ijk1 = jj(i,k)
-            ijk2 = jj(im,k)
-            ph = 0.5*( phi(ijk1) + phi(ijk2) )
-            phi(ijk1) = ph
-            phi(ijk2) = ph
-         end if
- 1100 continue
+      
 
       return
       end

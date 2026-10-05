@@ -37,7 +37,7 @@ c       vq(k) = vq(k) / rhol
 
         vq(k) = 8.*eps0*fs*dp(k)*dp(k)*dp(k)
         vq(k) = pi*sqrt( vq(k) )
-c       vq(k) = 0.8 * vq(k)    ! 旧: 限界帯電量の80%。現在は限界帯電量(100%)
+c       vq(k) = 0.8 * vq(k)    ! 川谷条件: レイリー限界100%(80%倍率を外す)
         vq(k) = vq(k) / vp(k)
         vq(k) = vq(k) / rhol
 
