@@ -22,6 +22,9 @@ viz_out/
 _*.png
 viz_sample_synthetic.png
 
+# Python のキャッシュ
+__pycache__/
+
 # OS / エディタ
 .DS_Store
 Thumbs.db

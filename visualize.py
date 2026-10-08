@@ -49,6 +49,36 @@ YHOL1 = 93.0e-3
 YHOL2 = 92.0e-3
 
 
+def save_gif_fixed_palette(fig, update, nframes, path, fps, dpi):
+    """GIFを全フレーム共通のパレット（色の表）で保存する。
+    matplotlib標準のPillowWriterはフレームごとに256色へ減色するため、
+    同じカラーバーでもフレームごとに色が少しずつ変わって見える。
+    ここでは全フレームを描いてから共通パレットを1つ作り、
+    全フレームをそのパレットで減色する（ディザなし）ので、
+    同じ色の画素は全フレームで必ず同じ色になる。"""
+    from PIL import Image
+    Q = getattr(Image, "Quantize", Image)
+    D = getattr(Image, "Dither", Image)
+    fig.set_dpi(dpi)
+    imgs = []
+    for k in range(nframes):
+        update(k)
+        fig.canvas.draw()
+        rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()
+        imgs.append(Image.fromarray(rgb))
+    # 共通パレット: 最大8枚のフレームを縦に並べた画像から作る
+    picks = sorted(set(np.linspace(0, nframes - 1,
+                                   min(8, nframes)).astype(int)))
+    w, h = imgs[0].size
+    mosaic = Image.new("RGB", (w, h * len(picks)))
+    for i, p in enumerate(picks):
+        mosaic.paste(imgs[p], (0, h * i))
+    pal = mosaic.quantize(colors=255, method=Q.MEDIANCUT)
+    out = [im.quantize(palette=pal, dither=D.NONE) for im in imgs]
+    out[0].save(path, save_all=True, append_images=out[1:],
+                duration=int(1000 / fps), loop=0, optimize=False)
+
+
 def setup_font():
     from matplotlib import font_manager
     for name in ["Yu Gothic", "Meiryo", "MS Gothic", "MS PGothic",
@@ -502,8 +532,8 @@ def main():
             gif = os.path.join(args.outdir, f"{kd}_animation.gif")
             mp4 = os.path.join(args.outdir, f"{kd}_animation.mp4")
             if args.gif:
-                anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
-                          dpi=100)
+                save_gif_fixed_palette(fig, upd, len(frames), gif,
+                                   args.fps, 100)
                 print(f"  保存: {gif}", file=sys.stderr)
             else:
                 try:
@@ -512,8 +542,8 @@ def main():
                     print(f"  保存: {mp4}", file=sys.stderr)
                 except Exception as e:
                     print(f"  MP4不可({e})->GIF", file=sys.stderr)
-                    anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
-                              dpi=100)
+                    save_gif_fixed_palette(fig, upd, len(frames), gif,
+                                   args.fps, 100)
                     print(f"  保存: {gif}", file=sys.stderr)
             plt.close(fig)
 
@@ -613,8 +643,8 @@ def main():
             gif = os.path.join(args.outdir, "efield_animation.gif")
             mp4 = os.path.join(args.outdir, "efield_animation.mp4")
             if args.gif:
-                anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
-                          dpi=100)
+                save_gif_fixed_palette(fig, updE, len(frames), gif,
+                                   args.fps, 100)
                 print(f"  保存: {gif}", file=sys.stderr)
             else:
                 try:
@@ -623,8 +653,8 @@ def main():
                     print(f"  保存: {mp4}", file=sys.stderr)
                 except Exception as e:
                     print(f"  MP4不可({e})->GIF", file=sys.stderr)
-                    anim.save(gif, writer=animation.PillowWriter(fps=args.fps),
-                              dpi=100)
+                    save_gif_fixed_palette(fig, updE, len(frames), gif,
+                                   args.fps, 100)
                     print(f"  保存: {gif}", file=sys.stderr)
             plt.close(fig)
 

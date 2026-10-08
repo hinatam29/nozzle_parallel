@@ -41,10 +41,10 @@ from matplotlib.cm import ScalarMappable
 
 # ---- 幾何形状（geo.f と対応、単位 m）。xlen はデータから自動判定 ------
 YLEN = 0.1
-XLEN = 5.0e-3       # ノズル間隔 5mm（geo.f と同じ。推定に失敗した時の既定値）
+XLEN = 1.1e-2       # ノズル間隔 11mm（geo.f と同じ。推定に失敗した時の既定値）
 XNOZ = 0.4e-3       # ノズル半径方向幅
 YNOZ = 1.0e-3       # ノズル軸方向長さ（上端から）
-XHOL = 1.5625e-3    # 対向電極の穴の半幅（geo.f と同じ。間隔に比例して縮小）
+XHOL = 5.0e-3       # 対向電極の穴（各ノズル側 XHOL 幅）
 YHOL1 = 93.0e-3
 YHOL2 = 92.0e-3
 
@@ -282,7 +282,7 @@ def build(kind, dual, xlen_m, norm, cmap, label):
         w = 9.5 if xlen_m > 0.06 else 7.0
         fig = plt.figure(figsize=(w, 4.6))
         # 右側にカラーバーの目盛り文字が収まる余白を残す
-        axes = [fig.add_axes([0.11, 0.12, 0.69, 0.74])]
+        axes = [fig.add_axes([0.08, 0.12, 0.72, 0.74])]
         cax = fig.add_axes([0.84, 0.12, 0.025, 0.70])
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
@@ -555,7 +555,7 @@ def main():
         else:
             X, Y, PHI = res
             fig = plt.figure(figsize=(7.0, 4.6))
-            ax = fig.add_axes([0.11, 0.14, 0.76, 0.74])
+            ax = fig.add_axes([0.09, 0.14, 0.78, 0.74])
             cax = fig.add_axes([0.90, 0.14, 0.02, 0.74])
             cf = plot_efield(ax, X, Y, PHI, xlen_m)
             ax.set_xlim(0, xlen_m * 1e3)
