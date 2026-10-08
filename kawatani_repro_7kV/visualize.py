@@ -409,12 +409,26 @@ EF_COLORS = ["#0b1a8c", "#1f45d6", "#2f7fe8", "#35b5f2", "#00e0ff", "#00e6a8",
 EF_CMAP = matplotlib.colors.ListedColormap(EF_COLORS).with_extremes(
     under="#050a3c", over="#ff00c8")
 
+# 液滴（空間電荷）がつくる電場のGIF（efieldt）用の色の範囲。
+# 実際の値は 10^1〜10^5 V/m 程度（5mm間隔の最大でも約1.4×10^5 V/m）なので、
+# 上端を 10^6 V/m にする。色は電場図（efield）と同じ対応（同じ強さ＝同じ色）で、
+# 10^6 より上の2色を使わないだけ。範囲外は 下=濃紺 / 上=マゼンタ。
+ET_VMAX = 1.0e6
+ET_CMAP = matplotlib.colors.ListedColormap(EF_COLORS[:10]).with_extremes(
+    under="#050a3c", over="#ff00c8")
 
-def efield_colorbar(fig, cf, cax):
+
+def efield_colorbar(fig, cf, cax, vmax=None, **kw):
     """電場図のカラーバー: 1桁ごとに 10^n V/m の目盛りと単位を付ける。"""
-    ticks = 10.0 ** np.arange(np.log10(EF_VMIN), np.log10(EF_VMAX) + 0.01)
-    cb = fig.colorbar(cf, cax=cax, ticks=ticks)
-    cb.ax.set_yticklabels([f"$10^{{{int(round(np.log10(t)))}}}$" for t in ticks])
+    vmax = EF_VMAX if vmax is None else vmax
+    ticks = 10.0 ** np.arange(np.log10(EF_VMIN), np.log10(vmax) + 0.01)
+    cb = fig.colorbar(cf, cax=cax, ticks=ticks, **kw)
+    # 目盛りは 10^n 表記に固定（matplotlib の自動表記 1e7 などで上書きされないように）
+    from matplotlib.ticker import FixedLocator, FuncFormatter
+    cb.locator = FixedLocator(ticks)
+    cb.formatter = FuncFormatter(
+        lambda v, p: f"$10^{{{int(round(np.log10(v)))}}}$" if v > 0 else "")
+    cb.update_ticks()
     cb.ax.minorticks_off()
     cb.set_label("電場の強さ |E| [V/m]" if JP else "|E| [V/m]")
     return cb
@@ -589,24 +603,17 @@ def main():
             dpz, dpx = np.gradient(PHc, zc1, xc1)
             Eex, Eez = -dpx, -dpz               # 電極(静的)場
             soft = (xc1[1] - xc1[0]) * 0.6
-            # 色スケールは最終フレーム（液滴が最も多い）の空間電荷場で固定
-            xq, yq, dq, cq = active(vns, frames[-1])
-            if len(xq):
-                e0x, e0z = efield_from_charges(xq, yq, droplet_charge(dq),
-                                               Xc, Zc, xlen_m, soft)
-                E0 = np.sqrt(e0x ** 2 + e0z ** 2)
-                pos = E0[np.isfinite(E0) & (E0 > 0)]
-                vmax = float(np.percentile(pos, 99)) if pos.size else 1.e4
-            else:
-                vmax = 1.e4
-            vmin = vmax / 1e3
-            levels = np.logspace(np.log10(vmin), np.log10(vmax), 12)
+            # 色の目盛りは電場図(efield)と同じ固定値・同じ段階色にする
+            # （どのフレーム・どの計算でも同じ色＝同じ電場の強さ）
+            levels = 10.0 ** np.arange(np.log10(EF_VMIN),
+                                       np.log10(ET_VMAX) + 0.01, 0.5)
+            enorm = BoundaryNorm(levels, ET_CMAP.N)
             fig = plt.figure(figsize=(4.6, 6.0))
             ax = fig.add_axes([0.16, 0.10, 0.60, 0.80])
             cax = fig.add_axes([0.80, 0.10, 0.04, 0.80])
-            sm = ScalarMappable(norm=LogNorm(vmin, vmax), cmap="plasma")
+            sm = ScalarMappable(norm=enorm, cmap=ET_CMAP)
             sm.set_array([])
-            fig.colorbar(sm, cax=cax, label="|E| [V/m]")
+            efield_colorbar(fig, sm, cax, vmax=ET_VMAX, extend="both")
 
             def updE(kk):
                 ax.clear()
@@ -617,17 +624,18 @@ def main():
                 else:
                     Ex = np.zeros_like(Xc)
                     Ez = np.zeros_like(Xc)
-                Em = np.clip(np.sqrt(Ex ** 2 + Ez ** 2), vmin, vmax)
+                Em = np.sqrt(Ex ** 2 + Ez ** 2)
                 ax.contourf(xc1 * 1e3, zc1 * 1e3, Em, levels=levels,
-                            cmap="plasma", norm=LogNorm(vmin, vmax),
+                            cmap=ET_CMAP, norm=enorm,
                             extend="both", zorder=1)
                 try:
-                    ax.streamplot(xc1 * 1e3, zc1 * 1e3, Ex, Ez, color="white",
+                    ax.streamplot(xc1 * 1e3, zc1 * 1e3, Ex, Ez, color="black",
                                   density=1.0, linewidth=0.5, arrowsize=0.7)
                 except Exception:
                     pass
                 if len(xp):
-                    ax.scatter(xp * 1e3, yp * 1e3, s=2, c="cyan", alpha=0.5,
+                    ax.scatter(xp * 1e3, yp * 1e3, s=4, c="white", edgecolors="black",
+                               linewidths=0.2, alpha=0.8,
                                zorder=3,
                                label="液滴の位置" if JP else "droplets")
                     ax.legend(loc="upper right", fontsize=8, framealpha=0.75,
