@@ -22,6 +22,9 @@ viz_out/
 _*.png
 viz_sample_synthetic.png
 
+# サーバー(Yokohama)へ送るためのソースのコピー（元のフォルダと同じ内容）
+_to_yokohama/
+
 # Python のキャッシュ
 __pycache__/
 
