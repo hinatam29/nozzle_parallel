@@ -37,3 +37,7 @@ Thumbs.db
 #    *.f  *.inc  makefile  visualize.py  *.md
 #    _backup_1nozzle/  (元の1ノズル版ソース)
 # ============================================================
+
+# 計算ログ（数MB。各フォルダにあるので追跡しない）
+go.out.log*
+log.txt
