@@ -17,8 +17,10 @@ go.out
 # 旧バックアップ
 *.bak
 
-# 可視化の出力・一時確認画像
-viz_out/
+# 可視化の出力：図（PNG・GIF）は自分の PC から GitHub で見られるよう追跡する（2026-10-16〜）
+# 一時確認画像は追跡しない
+desktop.ini
+*.mp4
 _*.png
 viz_sample_synthetic.png
 
