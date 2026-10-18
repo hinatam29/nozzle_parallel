@@ -2,11 +2,11 @@
 # ==== 計算の進み具合をまとめて表示 ====
 # 使い方:  bash progress.sh            … 1回だけ表示
 #          watch -n 60 bash progress.sh … 60秒ごとに自動更新（Ctrl+C で終了）
-# 対象: 2_parallel/*/pitch*/ と、kawatani 直下に残っている parallel_pitch*/
+# 対象: 1_single/*/*、2_parallel/*/pitch*、3_opposed/*/*、直下に残っている parallel_pitch*
 cd "$(dirname "$0")"
 now=$(date +%s)
 printf "%-58s %8s %7s %7s %6s  %s\n" "フォルダ" "ステップ" "進捗" "液滴数" "BADP" "状態（ログ更新）"
-for d in 2_parallel/*/pitch* 3_opposed/*/pitch* parallel_pitch*; do
+for d in 1_single/*/* 2_parallel/*/pitch* 3_opposed/*/* parallel_pitch*; do
   log=$d/go.out.log
   [ -f "$log" ] || continue
   # 最終ステップ数 = ftime/dt（main.f のコメントでない行から読む）
