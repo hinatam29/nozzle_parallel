@@ -17,7 +17,8 @@
     │   └─ fieldFIX/        … 電場計算を修正した版（2026-10-19〜）
     ├─ 2_parallel/          … 並列ノズル（平面2次元・左右が鏡面）
     │   ├─ fieldOLD/        … 電場計算に誤りあり
-    │   └─ fieldFIX/        … 電場計算を修正した版（2026-10-16〜）
+    │   ├─ fieldFIX/        … 電場計算を修正した版（2026-10-16〜）
+    │   └─ fieldFIX2/       … さらに右のノズル付近の格子のずれを直した版（2026-10-20〜）
     └─ 3_opposed/           … 対向ノズル（円筒・同じ軸上で向かい合わせ）
         └─ fieldFIX/
 
@@ -30,6 +31,7 @@
 |---|---|
 | 0_original/kawatani_original_1nozzle | 川谷さんの元の6ファイル |
 | 1_single/fieldOLD/repro_6kV, repro_7kV | 川谷さん条件の再現（円筒、1本、6 kV / 7 kV） |
+| 2_parallel/fieldFIX2/pitch{11,16,32}mm_hole5mm_d11nm_k1e-4 | fieldFIX と同じ条件で、右のノズル付近の格子のずれを直した版（下の説明） |
 | 1_single/fieldFIX/single_7kV_d11nm_k1e-4 | 1本・円筒・7 kV。並列の新版（d11nm・k1e-4・カニンガム補正・電場修正・再開機能）と同じ物理に合わせた版。対向モデルの土台と比較の基準 |
 | 1_single/fieldFIX/single_7kV_ring_d11nm_k1e-4 | 上と同じで、対向電極を実験と同じリング（内径 10 mm・外径 12 mm・厚さ 1 mm）にした版。対向と比べる基準 |
 | 3_opposed/fieldFIX/opp13mm_ring_7kV_d11nm_k1e-4 | 対向ノズル（上下から向かい合わせ）、ノズル先端どうしの間隔 13 mm、真ん中にリング電極 1 枚（各ノズル先端から 6 mm）。衝突なし |
@@ -59,3 +61,8 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 円筒版（1_single/fieldFIX）では、ほかに `potential.f` の 1/r の係数をその点の r(i) に直した（旧: セル境界 r(i+1/2)）。また、電位の解き直しを数回行って十分に収束させる。
 
 リング電極・対向の版では、形を `geo.f` の先頭の「形状の設定」（nopp、xhol、xring、yrc、ytip1、ytip2）だけで決める。geo.f が書き出す `geom.txt` を visualize.py が読んで、ノズルとリングの位置を図に描き、表示する高さの範囲も自動で決める。pout = 5 はノズルに戻った液滴。
+
+
+## 並列の右のノズル付近の電場（fieldFIX と fieldFIX2 の違い）
+
+`geo.f` の格子幅が `dx = xlen/nx` だったため、電位を解く格子点 i = 1〜nx−1 の右端が x = xlen − 2dx（11 mm で 22 µm×2 手前）になり、右のノズル（x = xlen）が電位の右端からずれていた。そのため右の軸の近くで横向きの電場が正しくなく、右の噴霧だけ細くなっていた。fieldFIX2 では `dx = xlen/(nx−2)` にして、格子点が x = 0〜xlen ちょうどになるようにした（左右の横向きの電場が完全に一致することを確認）。fieldOLD・fieldFIX の並列は、左のノズルの液滴だけで比べる。
