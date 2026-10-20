@@ -18,7 +18,8 @@
     ├─ 2_parallel/          … 並列ノズル（平面2次元・左右が鏡面）
     │   ├─ fieldOLD/        … 電場計算に誤りあり
     │   └─ fieldFIX/        … 電場計算を修正した版（2026-10-16〜）
-    └─ 3_opposed/           … 対向ノズル（これから）
+    └─ 3_opposed/           … 対向ノズル（円筒・同じ軸上で向かい合わせ）
+        └─ fieldFIX/
 
 各計算フォルダの名前：`pitch〇〇mm`（ノズル間隔）`_hole〇mm`（対向電極の穴の半幅）`_d〇〇nm`（液滴の平均径）`_k〇〇`（吸収係数 m/s）。
 特に書いていない条件は共通：ノズル +7 kV・対向電極 0 V、限界帯電量 100 %、初速度 −3.0 m/s、計算時間 11 ms（55,000 ステップ）。
@@ -30,6 +31,10 @@
 | 0_original/kawatani_original_1nozzle | 川谷さんの元の6ファイル |
 | 1_single/fieldOLD/repro_6kV, repro_7kV | 川谷さん条件の再現（円筒、1本、6 kV / 7 kV） |
 | 1_single/fieldFIX/single_7kV_d11nm_k1e-4 | 1本・円筒・7 kV。並列の新版（d11nm・k1e-4・カニンガム補正・電場修正・再開機能）と同じ物理に合わせた版。対向モデルの土台と比較の基準 |
+| 1_single/fieldFIX/single_7kV_ring_d11nm_k1e-4 | 上と同じで、対向電極を実験と同じリング（内径 10 mm・外径 12 mm・厚さ 1 mm）にした版。対向と比べる基準 |
+| 3_opposed/fieldFIX/opp13mm_ring_7kV_d11nm_k1e-4 | 対向ノズル（上下から向かい合わせ）、ノズル先端どうしの間隔 13 mm、真ん中にリング電極 1 枚（各ノズル先端から 6 mm）。衝突なし |
+| 3_opposed/fieldFIX/opp33mm_ring_7kV_d11nm_k1e-4 | 同じで間隔 33 mm（各ノズル先端から 16 mm） |
+| …_fine（上の3つそれぞれ） | 同じ条件で、液滴の位置を細かく書き出す版（spray_fine.dat：最初の 3 ms と最後の 1 ms を 10 µs ごと）。`python3 trajectory.py` で軌跡の重ね合わせ図（実験の高速度カメラの重ね合わせと同じ見方）を作る |
 | 2_parallel/fieldOLD/pitch16mm_hole5mm_d500nm | 並列 16 mm、液滴 500 nm、横格子 32 µm（もとは kawatani 直下にあった計算） |
 | 　〃 の中の `*_3kv_oldpolarity.*` | 同じフォルダの古い計算：ノズル 0 V・対向電極 −3 kV（9/29）。図は `viz_out/ノズル0kV・対向電極-3kV` |
 | 　〃 の中の `*_3kv_80pct.*` | ノズル 3 kV・対向電極 0 V・帯電量 80 %（10/2）。図は `viz_out/20261004ノズル3kV・対向電極0kV・帯電量80％` |
@@ -52,3 +57,5 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 あわせて、電位は液滴の電荷を含まず毎ステップ同じ答えになるので、最初の1回だけ厳しく収束させて解くようにした（計算時間が短くなる）。
 
 円筒版（1_single/fieldFIX）では、ほかに `potential.f` の 1/r の係数をその点の r(i) に直した（旧: セル境界 r(i+1/2)）。また、電位の解き直しを数回行って十分に収束させる。
+
+リング電極・対向の版では、形を `geo.f` の先頭の「形状の設定」（nopp、xhol、xring、yrc、ytip1、ytip2）だけで決める。geo.f が書き出す `geom.txt` を visualize.py が読んで、ノズルとリングの位置を図に描き、表示する高さの範囲も自動で決める。pout = 5 はノズルに戻った液滴。
