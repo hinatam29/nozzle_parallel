@@ -1,0 +1,12 @@
+噴霧データ読み込み中 ...
+  -> 300 フレーム読み込み (spray_fine.dat)
+  ノズル間隔(xlen)=100.0mm, z=(31.5, 68.5)mm, C_total最大=1.39e-20, 色の上端=2e-20
+[spread] 作成中 ...
+  保存: viz_fine/spread_snap_000_istp50.png
+  保存: viz_fine/spread_snap_049_istp2500.png
+  保存: viz_fine/spread_snap_099_istp5000.png
+  保存: viz_fine/spread_snap_149_istp7500.png
+  保存: viz_fine/spread_snap_199_istp10000.png
+  保存: viz_fine/spread_snap_249_istp12500.png
+  保存: viz_fine/spread_snap_299_istp15000.png
+完了。出力先: /sessions/rcw-01qkupibapjhyx9dsgyuxtwu/mnt/kawatani/3_opposed/fieldFIX/opp33mm_ring_7kV_d11nm_k1e-4_fine/viz_fine
