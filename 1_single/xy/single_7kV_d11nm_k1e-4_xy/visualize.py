@@ -9,7 +9,7 @@
   (2) 二酸化炭素吸収 : 液滴の吸収量 clt を格子集計した「C_total [mol]」の
                        塗り等高線（先行研究 図2の右半分）
 
-既定は「1枚の絵に両ノズル」。ノズル・対向電極は灰色の四角、軸は r/z [mm]。
+既定は「1枚の絵に両ノズル」。ノズル・対向電極は灰色の四角、軸は x/y [mm]（xy の Single 用に変更）。
 ノズル間隔（領域幅 xlen）は spray.dat から自動判定します。
 
 読み込み: spray.dat（xp, yp, dp, clt, pout）
@@ -94,7 +94,7 @@ def setup_font():
 
 JP = setup_font()
 L = {
-    "r": "r [mm]", "z": "z [mm]", "d": "d [nm]", "ct": "C_total [mol]",
+    "r": "x [mm]", "z": "y [mm]", "d": "d [nm]", "ct": "C_total [mol]",
     "step": "ステップ" if JP else "step",
     "t_spread": "液滴の広がり" if JP else "Droplet spread",
     "t_absorb": "二酸化炭素吸収" if JP else "Carbon dioxide absorption",

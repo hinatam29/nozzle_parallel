@@ -131,8 +131,8 @@ def main():
 
     ax.set_xlim(0, args.rmax)
     ax.set_ylim(args.zmin, args.zmax)
-    ax.set_xlabel("r [mm]", style="italic")
-    ax.set_ylabel("z [mm]", style="italic")
+    ax.set_xlabel("x [mm]", style="italic")
+    ax.set_ylabel("y [mm]", style="italic")
     cb = fig.colorbar(cf, cax=cax, ticks=LEVELS)
     cb.ax.set_yticklabels(LABELS, fontsize=7)
     cb.ax.set_title(r"$\Phi$ [V]", fontsize=8, loc="left")
