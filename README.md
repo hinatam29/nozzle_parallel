@@ -109,5 +109,24 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
   - `main.f`：`ftime = 22.e-3`、液滴配列の上限 `ipmx = 300000`（約 70 ms 分）、flow.dat は最初と 11000 ステップごとだけ書く
   - `subcom.inc`：配列の大きさ `m = 300000`
   - `restart.f`：上限が増えた場合、古い restart.dat（10 万個分）を読み、残りは initial の値のままにする
+- `pitch11mm_hole5mm_d11nm_k1e-4_q100_22ms`（11/09）：同じく 11 mm・10 nm・帯電量 100 %（7 kV）を 22 ms まで。Yokohama で計算する（送るファイルは `_to_yokohama/pitch11mm_hole5mm_d11nm_k1e-4_q100_22ms.tgz`）
+- フォルダは `python3 tools/make_long.py <元フォルダ> <新フォルダ> <終了時刻ms>` で作れる
 - flow.dat は元の最初のコマ（電位の図用）だけをコピーした
 - さらに延ばすときは `ftime` を書き換えて `make` し直し、そのまま実行すれば restart.dat の続きから計算する
+
+## 2_parallel/fieldFIX3_multi5random_gasflow（2026-11-10〜）：一様な空気の流れを入れた感度の試験
+
+- 実験で噴霧が下流へ行くのは、噴霧が起こす空気の流れ（電気風）が原因かを確かめるための試験版。元は 11 mm・7 kV・10 nm・帯電量 100 %（multi5random）
+- `pitch11mm_hole5mm_d11nm_k1e-4_q100_7kV_11ms_ugas{0.2,0.5,1}mps`：領域全体に、噴霧の向き（−y）の一様な空気の流れ 0.2・0.5・1 m/s を入れる。0 ms から 11 ms まで
+- 変更（`tools/make_gas.py <元フォルダ> <新フォルダ> <ugas>` で作る）：`subcom.inc` に `parameter( ugas = … )`、`viscous.f` は抗力を空気との相対速度で計算、`pcount.f` は抗力の陰解法の式に空気の速度を入れる（u_new = (u + dt·F − dt·β·ugas) / (1 + dt·β)）、flow.dat は 11000 ステップごと
+- 割り切り：空気の流れは電極やノズルのまわりでも一様（流れの計算はしていない）。液滴から空気への反作用もない
+- 局所配列の大きさ 100000 を `m`（subcom.inc の配列上限）にそろえた（`tools/make_long.py` にも追加）。上限を 30 万にした 22 ms 版では、液滴が 10 万個を超えるとはみ出すおそれがあったため（22 ms では 9.4 万個なので影響なし）
+- 気づいたこと：`pcount.f` の重力は +y（上向き）になっている（噴霧は −y 向き）。10 nm〜500 nm では重力の影響は 10⁻⁸ m/s 程度なので結果には影響しない
+
+## フォルダ名の整理（2026-11-10、`tools/rename_folders.sh`）
+
+- フォルダ名の最後に「電圧_計算時間」をつけた（例 `_7kV_11ms`）
+- 液滴をランダムに出す版（旧 `fieldFIX3_multi5r`、`fieldFIX3_multi5r_3kV`、`fieldFIX3_multi5r_long`）は `2_parallel/fieldFIX3_multi5random/` にまとめた
+- 液滴をランダムにせず 3 本の筋になった失敗版（旧 `fieldFIX3_multi5`）は `2_parallel/fieldFIX3_multi5_notrandom_failed/`
+- 直下にあった `parallel_pitch5mm_7kV_q100`、`parallel_pitch11mm_hole5mm_7kV_q100`（500 nm・旧電場）は `2_parallel/fieldOLD/` へ
+- 古い名前と新しい名前の対応は `bash tools/rename_folders.sh` で表示される（実行前の一覧）。このファイルの上の方の説明には古い名前が残っているところがある
