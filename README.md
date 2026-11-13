@@ -130,3 +130,12 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 - 液滴をランダムにせず 3 本の筋になった失敗版（旧 `fieldFIX3_multi5`）は `2_parallel/fieldFIX3_multi5_notrandom_failed/`
 - 直下にあった `parallel_pitch5mm_7kV_q100`、`parallel_pitch11mm_hole5mm_7kV_q100`（500 nm・旧電場）は `2_parallel/fieldOLD/` へ
 - 古い名前と新しい名前の対応は `bash tools/rename_folders.sh` で表示される（実行前の一覧）。このファイルの上の方の説明には古い名前が残っているところがある
+
+## 二酸化炭素吸収量の図を川谷さんと同じ（気相）に戻した（2026-11-11、`tools/viz_gas.py`）
+
+- 川谷さんの修論 図 3.3.22 の C_total は**気相**の吸収量：各セルの初期濃度に対する変化率 β × 初期濃度 × セルの体積（円筒は ∭ β C_g,ini r dr dθ dz、式 (34)）。コードでは flow.dat の `cvolume`（`diffusion1.f`）
+- 7/26 の可視化の刷新（`visualize.py`、コミット 1d096a9）で、吸収の図を「飛んでいる液滴の吸収量（clt × 体積）をマスごとに足したもの」に変えていた。`visualize.py` の absorb の図は液滴側（参考）。ゼミなどで使う吸収の図は `viz_gas.py` を使う
+- 体裁：左に飛んでいる液滴（液滴径の色）、右に C_total。円筒は r を負側に折り返した液滴＋右に C_total（川谷さんと同じ）、並列はノズル間隔の真ん中で分けて左半分に液滴・右半分に C_total。電極の中は灰色。色の区切りは川谷さんと同じ比（上端の 1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100 %）、上端は 1×10ⁿ に自動（`--ctop` で指定）
+- 使い方（計算フォルダで）：`python3 ../../../tools/viz_gas.py --gif`（`--zmin 0` で下まで、`--stride 11` で flow.dat のコマを間引く）。出力は `viz_gas/`
+- flow.dat のコマごとに描くので、11000 ステップごとにしか flow.dat を書かない版（3 kV・22 ms・空気の流れ）は 2.2 ms ごとの 6 枚程度になる
+- すべての計算フォルダでまとめて描き直す：`bash tools/viz_gas_all.sh`（一覧だけ）→ `nohup bash tools/viz_gas_all.sh run > tools/viz_gas_all.log 2>&1 &`。flow.dat を D:\kawatani_data に移したフォルダは D: のものを使う。以前の液滴側の吸収の図（viz_out/absorb_*）は viz_out/old_droplet_absorb/ に移す。3本の筋の失敗版と計算中のフォルダは除外
