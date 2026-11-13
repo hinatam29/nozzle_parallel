@@ -139,3 +139,11 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 - 使い方（計算フォルダで）：`python3 ../../../tools/viz_gas.py --gif`（`--zmin 0` で下まで、`--stride 11` で flow.dat のコマを間引く）。出力は `viz_gas/`
 - flow.dat のコマごとに描くので、11000 ステップごとにしか flow.dat を書かない版（3 kV・22 ms・空気の流れ）は 2.2 ms ごとの 6 枚程度になる
 - すべての計算フォルダでまとめて描き直す：`bash tools/viz_gas_all.sh`（一覧だけ）→ `nohup bash tools/viz_gas_all.sh run > tools/viz_gas_all.log 2>&1 &`。flow.dat を D:\kawatani_data に移したフォルダは D: のものを使う。以前の液滴側の吸収の図（viz_out/absorb_*）は viz_out/old_droplet_absorb/ に移す。3本の筋の失敗版と計算中のフォルダは除外
+
+## 2_parallel/fieldFIX3_multi5random_1113（2026-11-13〜）：教授との相談で決めた試験（`tools/make_variant.py`）
+
+元は 11 mm・7 kV・10 nm・帯電量 100 %・ランダム（fieldFIX3_multi5r の pitch11mm…_q100）、0〜11 ms。Yokohama で 6 本同時（各 4 スレッド）
+- `…_sheet80mm_exp-10.5kV`・`…_sheet80mm_exp-3.5kV`：y = 80 mm より下を全部シート電極にする（`potential.f` の loop 790、Dirichlet）。計算の電位はノズル +7 kV・リング 0 V なので、シートは −3.5 kV / +3.5 kV。実験の言い方（ノズル 0 V・リング −7 kV）ではシート −10.5 kV（リングより強い）/ −3.5 kV（リングより弱い）。シートに届いた液滴は pout = 6（`pcount.f` の loop 15）
+- `pitch11mm_hole3mm…`・`pitch11mm_hole2mm…`：電極の穴の半径を 5 → 3・2 mm（`geo.f`・`pcount.f`・`visualize.py` の xhol）
+- `…_gas40mlmin_avg0.00015mps`・`…_gas40mlmin_inlet0.053mps`：噴霧と同じ向きの一様なガスの流れ。卒論の並列実験の最大ガス流量 40 ml/min を、容器（内径 75 mm）の断面で割った平均流速 0.15 mm/s と、ガス入口（直径 4 mm）での流速 0.053 m/s（上限の目安）
+- 確認（クラウドで 0.2 ms）：シートありでは電極の下の電位がシートに向かって下がる（−10.5 kV 版：y = 86 mm で −1.6 kV、−3.5 kV 版：+2.5 kV）。どれもコンパイル・実行できる
