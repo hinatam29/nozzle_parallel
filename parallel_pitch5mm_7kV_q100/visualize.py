@@ -29,6 +29,12 @@ import re
 import sys
 
 import numpy as np
+
+def _eq(v):
+    """streamplot 用に座標を等間隔に置き直す（丸め誤差で失敗しないように）。2026-11-16"""
+    v = np.asarray(v)
+    return np.linspace(v[0], v[-1], len(v))
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -389,12 +395,22 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
                      zorder=1)
     # 電気力線: 電場が vmin より弱い所は向きが数値誤差で決まるので描かない
     weak = Emag < vmin
+    # 2026-11-16: 格子の座標の丸め誤差で streamplot が失敗していたので、等間隔の座標に置き直し、
+    # 表示する高さ（SL_ZLIM）の範囲だけで描く（範囲全体で描くと表示部分の線が少なくなる）
+    xs = np.linspace(xc[0], xc[-1], len(xc))
+    zs = np.linspace(zc[0], zc[-1], len(zc))
+    zl = globals().get("SL_ZLIM")
+    sel = slice(None)
+    if zl is not None:
+        jj = np.where((zs * 1e3 >= zl[0] - 0.5) & (zs * 1e3 <= zl[1] + 0.5))[0]
+        if len(jj) > 2:
+            sel = slice(jj[0], jj[-1] + 1)
     try:
-        ax.streamplot(xc * 1e3, zc * 1e3, np.ma.masked_where(weak, Ex),
-                      np.ma.masked_where(weak, Ez), color="black",
-                      density=1.1, linewidth=0.5, arrowsize=0.8)
-    except Exception:
-        pass
+        ax.streamplot(_eq(xs) * 1e3, _eq(zs[sel]) * 1e3, np.ma.masked_where(weak, Ex)[sel],
+                      np.ma.masked_where(weak, Ez)[sel], color="black",
+                      density=1.1, linewidth=0.5, arrowsize=0.8, zorder=3)
+    except Exception as ex:
+        print("  電気力線を描けませんでした:", ex, file=sys.stderr)
     draw_geometry(ax, xlen_m)
     return cf
 
@@ -571,6 +587,7 @@ def main():
             fig = plt.figure(figsize=(7.0, 4.6))
             ax = fig.add_axes([0.11, 0.14, 0.76, 0.74])
             cax = fig.add_axes([0.90, 0.14, 0.02, 0.74])
+            globals()["SL_ZLIM"] = zlim
             cf = plot_efield(ax, X, Y, PHI, xlen_m)
             ax.set_xlim(0, xlen_m * 1e3)
             ax.set_ylim(*zlim)
@@ -624,7 +641,7 @@ def main():
                             cmap=ET_CMAP, norm=enorm,
                             extend="both", zorder=1)
                 try:
-                    ax.streamplot(xc1 * 1e3, zc1 * 1e3, Ex, Ez, color="black",
+                    ax.streamplot(_eq(xc1) * 1e3, _eq(zc1) * 1e3, Ex, Ez, color="black",
                                   density=1.0, linewidth=0.5, arrowsize=0.7)
                 except Exception:
                     pass

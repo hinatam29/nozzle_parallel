@@ -147,3 +147,8 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 - `pitch11mm_hole3mm…`・`pitch11mm_hole2mm…`：電極の穴の半径を 5 → 3・2 mm（`geo.f`・`pcount.f`・`visualize.py` の xhol）
 - `…_gas40mlmin_avg0.00015mps`・`…_gas40mlmin_inlet0.053mps`：噴霧と同じ向きの一様なガスの流れ。卒論の並列実験の最大ガス流量 40 ml/min を、容器（内径 75 mm）の断面で割った平均流速 0.15 mm/s と、ガス入口（直径 4 mm）での流速 0.053 m/s（上限の目安）
 - 確認（クラウドで 0.2 ms）：シートありでは電極の下の電位がシートに向かって下がる（−10.5 kV 版：y = 86 mm で −1.6 kV、−3.5 kV 版：+2.5 kV）。どれもコンパイル・実行できる
+
+## 電場の図の電気力線を直した（2026-11-16、`tools/fix_streamplot.py`・`tools/fix_streamplot2.py`・`tools/efield_all.sh`）
+- 電場の図（`viz_out/efield_field.png`、電場の時間変化 efieldt）で、電気力線が描かれていなかった。格子の座標の丸め誤差で matplotlib の streamplot が「等間隔でない」とエラーになり、try/except で黙って飛ばされていたため
+- すべての visualize.py（57 個）で、streamplot に渡す座標を等間隔に置き直す（`_eq()`）。並列は表示する高さの範囲だけで電気力線を描く
+- すべての計算フォルダの電場の図を描き直す：`bash tools/efield_all.sh`（一覧だけ）→ `nohup bash tools/efield_all.sh run > tools/efield_all.log 2>&1 &`。並列は `viz_efield_wide/`（高さ 70〜100 mm）も作る。flow.dat を D: に移したフォルダは D: のものを使う

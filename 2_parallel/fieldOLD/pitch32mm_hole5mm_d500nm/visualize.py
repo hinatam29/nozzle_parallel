@@ -29,6 +29,12 @@ import re
 import sys
 
 import numpy as np
+
+def _eq(v):
+    """streamplot 用に座標を等間隔に置き直す（丸め誤差で失敗しないように）。2026-11-16"""
+    v = np.asarray(v)
+    return np.linspace(v[0], v[-1], len(v))
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -400,7 +406,7 @@ def plot_efield(ax, X, Y, PHI, xlen_m):
         if len(jj) > 2:
             sel = slice(jj[0], jj[-1] + 1)
     try:
-        ax.streamplot(xs * 1e3, zs[sel] * 1e3, np.ma.masked_where(weak, Ex)[sel],
+        ax.streamplot(_eq(xs) * 1e3, _eq(zs[sel]) * 1e3, np.ma.masked_where(weak, Ex)[sel],
                       np.ma.masked_where(weak, Ez)[sel], color="black",
                       density=1.1, linewidth=0.5, arrowsize=0.8, zorder=3)
     except Exception as ex:
@@ -635,7 +641,7 @@ def main():
                             cmap=ET_CMAP, norm=enorm,
                             extend="both", zorder=1)
                 try:
-                    ax.streamplot(xc1 * 1e3, zc1 * 1e3, Ex, Ez, color="black",
+                    ax.streamplot(_eq(xc1) * 1e3, _eq(zc1) * 1e3, Ex, Ez, color="black",
                                   density=1.0, linewidth=0.5, arrowsize=0.7)
                 except Exception:
                     pass
