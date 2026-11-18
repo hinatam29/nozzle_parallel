@@ -192,7 +192,9 @@ def active(varnames, frame):
     clt = d[:, idx["clt"]] if "clt" in idx else np.zeros(len(xp))
     pout = d[:, idx["pout"]] if "pout" in idx else np.zeros(len(xp))
     m = np.isfinite(xp) & np.isfinite(yp) & (pout == 0)
-    return xp[m], yp[m], dp[m], clt[m]
+    # 2026-11-18: 重なった所の見え方が偏らないように、描く順番をランダムにする（種は固定）
+    o = np.random.default_rng(12345).permutation(int(m.sum()))
+    return xp[m][o], yp[m][o], dp[m][o], clt[m][o]
 
 
 def infer_xlen(varnames, frames):
