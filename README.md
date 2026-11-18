@@ -152,3 +152,9 @@ fieldFIX では `drs = 0.5*(x(i+1,k)-x(i-1,k))`、`dzs = 0.5*(y(i,k+1)-y(i,k-1))
 - 電場の図（`viz_out/efield_field.png`、電場の時間変化 efieldt）で、電気力線が描かれていなかった。格子の座標の丸め誤差で matplotlib の streamplot が「等間隔でない」とエラーになり、try/except で黙って飛ばされていたため
 - すべての visualize.py（57 個）で、streamplot に渡す座標を等間隔に置き直す（`_eq()`）。並列は表示する高さの範囲だけで電気力線を描く
 - すべての計算フォルダの電場の図を描き直す：`bash tools/efield_all.sh`（一覧だけ）→ `nohup bash tools/efield_all.sh run > tools/efield_all.log 2>&1 &`。並列は `viz_efield_wide/`（高さ 70〜100 mm）も作る。flow.dat を D: に移したフォルダは D: のものを使う
+
+## 2_parallel/fieldFIX3_multi5random_1117（2026-11-17〜）：帯電量 10 %、電極の側面・下面を絶縁（`tools/make_variant.py --qfac / --insulate`）
+元は 11 mm・7 kV・10 nm・帯電量 100 %・ランダム（fieldFIX3_multi5r の pitch11mm…_q100）、0〜11 ms。Yokohama
+- `pitch11mm_hole5mm_d11nm_k1e-4_q10_7kV_11ms`：帯電量を限界帯電量の 0.1 倍（`eforce.f`・`pcount.f`・`intraction.f`）
+- `…_q100_7kV_11ms_insulated`：電極（x = 5〜6 mm、y = 92〜93 mm の長方形）の両横面と下面を絶縁。上面は導体のまま。絶縁面に付いた液滴は pout = 8 で、電荷を持ったままその場に残り、`intraction.f` でほかの液滴を押す電荷の源になる。上面から付いた液滴は今までどおり pout = 1（電荷は電極に流れる）。電場（ラプラス）は変えていない（薄い絶縁膜の下に金属がある想定）。絶縁膜の下の金属がつくる鏡像は入れていないので、たまった電荷の押し返しは大きめに出る（上限の見積もり）
+- 確認（クラウドで 1 ms）：pout = 8 の液滴が電極の下面（y ≈ 92.0 mm）と横面（92.8 mm）にできる

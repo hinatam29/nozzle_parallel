@@ -12,6 +12,8 @@ ap.add_argument('src'); ap.add_argument('dst')
 ap.add_argument('--ugas', type=float, default=0.0)
 ap.add_argument('--hole', type=float, default=None)
 ap.add_argument('--sheet', type=float, nargs=2, default=None)
+ap.add_argument('--qfac', type=float, default=None, help='帯電量を限界帯電量の何倍にするか（例 0.1）')
+ap.add_argument('--insulate', action='store_true', help='電極の両横面・下面を絶縁（そこに付いた液滴は電荷を持ったまま残り、ほかの液滴を押す）')
 a = ap.parse_args()
 here = os.path.dirname(os.path.abspath(__file__))
 subprocess.check_call([sys.executable, os.path.join(here, 'make_gas.py'), a.src, a.dst, str(a.ugas)])
@@ -67,4 +69,63 @@ c     --- 2026-11-13: シート電極（y <= ysht より下を全部電極、電
  15    continue
 """ % (ys, ys) + old)
     open('pcount.f', 'w').write(s)
+if a.qfac is not None:
+    f = a.qfac
+    for fn, old, new in [
+        ('eforce.f', "        vq(k) = vq(k) / rhol\n",
+         "        vq(k) = vq(k) / rhol\nc       --- 2026-11-17: 帯電量を限界帯電量の %g 倍にする ---\n        vq(k) = %g * vq(k)\n" % (f, f)),
+        ('pcount.f', "       vq(k) = vq(k)/vp(k)\n",
+         "       vq(k) = vq(k)/vp(k)\nc      --- 2026-11-17: 帯電量を限界帯電量の %g 倍にする ---\n       vq(k) = %g * vq(k)\n" % (f, f)),
+        ('intraction.f', "            qa(na) = pi*sqrt( 8.*eps0*fs*dp(k)*dp(k)*dp(k) )\n",
+         "            qa(na) = pi*sqrt( 8.*eps0*fs*dp(k)*dp(k)*dp(k) )\nc           --- 2026-11-17: 帯電量を限界帯電量の %g 倍にする ---\n            qa(na) = %g * qa(na)\n" % (f, f))]:
+        t = open(fn).read(); assert t.count(old) == 1, (fn, old); open(fn, 'w').write(t.replace(old, new))
+if a.insulate:
+    t = open('pcount.f').read()
+    old = """       if( xp(k) .ge. xhol  .and.  xp(k) .le. xlen-xhol
+     &     .and.  yp(k) .ge. yhol2
+     &     .and.  yp(k) .le. yhol1 )then
+
+       pout(k) = 1.
+"""
+    new = """c      --- 2026-11-17: 電極の両横面・下面は絶縁。そこに付いた液滴は pout = 8 で
+c      電荷を持ったまま残る（intraction.f でほかの液滴を押す）。上面は導体で pout = 1
+       if( pout(k) .eq. 8. )then
+       pout(k) = 8.
+       else if( xp(k) .ge. xhol  .and.  xp(k) .le. xlen-xhol
+     &     .and.  yp(k) .ge. yhol2
+     &     .and.  yp(k) .le. yhol1 )then
+
+       if( pout(k) .eq. 0.  .and.  yp(k)-dt*uyp(k) .lt. yhol1 )then
+         pout(k) = 8.
+       else if( pout(k) .ne. 8. )then
+         pout(k) = 1.
+       end if
+"""
+    assert t.count(old) == 1; t = t.replace(old, new); open('pcount.f', 'w').write(t)
+    t = open('intraction.f').read()
+    old = " 2    continue\n"
+    assert t.count(old) == 1
+    q = (" " * 12 + "qb = %g * qb\n" % a.qfac) if a.qfac is not None else ""
+    new = old + """c     --- 2026-11-17: 絶縁面に付いた液滴（pout = 8）も電荷の源として加える（動かさない）---
+      nb = na
+      do 3 k=1, ip
+         if( pout(k) .eq. 8. )then
+            nb = nb + 1
+            xa(nb) = xp(k)
+            ya(nb) = yp(k)
+            da(nb) = dp(k)
+            qb = pi*sqrt( 8.*eps0*fs*dp(k)*dp(k)*dp(k) )
+""" + q + """            qa(nb) = qb
+            if( mod(k-1,3) .eq. 0 )then
+               sa(nb) = 0.
+            else
+               sa(nb) = 1.
+            end if
+         end if
+ 3    continue
+"""
+    t = t.replace(old, new)
+    old2 = "         do 20 ll=1, na\n"; assert t.count(old2) == 1
+    t = t.replace(old2, "         do 20 ll=1, nb\n")
+    open('intraction.f', 'w').write(t)
 print('done', a.dst)
