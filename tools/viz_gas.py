@@ -39,11 +39,17 @@ def parse_block(lines, nc):
     return v.reshape(-1, nc)
 
 def read_flow(path, stride=1):
-    """flow.dat の全コマ（x, y, cvolume, cgg）を読む。"""
+    """flow.dat の全コマ（x, y, cvolume, cgg）を読む。
+    途中で切れたコマ（計算が止まって再開したとき）は飛ばし、次のコマから読み直す。"""
     frames = []
     with open(path, errors="replace") as fh:
         k = -1
-        for line in fh:
+        pend = None
+        while True:
+            line = pend if pend is not None else fh.readline()
+            pend = None
+            if not line:
+                break
             if "zone" not in line.lower():
                 continue
             m = re.search(r"n=\s*(\d+)", line)
@@ -51,6 +57,17 @@ def read_flow(path, stride=1):
             mj = re.search(r"j=\s*(\d+)", line)
             ni, nj = int(mi.group(1)), int(mj.group(1))
             block = list(itertools.islice(fh, ni * nj))
+            bad = [q for q, b in enumerate(block) if "zone" in b.lower()]
+            if bad or len(block) < ni * nj:
+                print(f"  flow.dat: step {m.group(1)} は途中で切れているので飛ばす", file=sys.stderr)
+                if bad:
+                    # 切れたコマの後ろに続いている次のコマの見出しから読み直す
+                    rest = block[bad[0]:]
+                    import io
+                    fh2 = io.StringIO("".join(rest[1:]))
+                    pend = rest[0]
+                    fh = _Chain(fh2, fh)
+                continue
             k += 1
             if k % stride:
                 continue
@@ -60,6 +77,23 @@ def read_flow(path, stride=1):
                                cvol=v[:, 3].reshape(nj, ni), cgg=v[:, 4].reshape(nj, ni)))
             print(f"  flow.dat: step {frames[-1]['istp']}", file=sys.stderr)
     return frames
+
+
+class _Chain:
+    """2つのファイルを続けて読む（readline と islice 用）。"""
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+    def readline(self):
+        l = self.a.readline()
+        return l if l else self.b.readline()
+    def __iter__(self):
+        return self
+    def __next__(self):
+        l = self.readline()
+        if not l:
+            raise StopIteration
+        return l
+
 
 def read_spray(path, want):
     """spray.dat から、ステップ番号が want に入るコマだけ読む。"""
@@ -74,7 +108,10 @@ def read_spray(path, want):
             istp, n = int(m.group(1)), int(mi.group(1))
             block = list(itertools.islice(fh, n))
             if istp in want:
-                out[istp] = parse_block(block, 5)
+                try:
+                    out[istp] = parse_block(block, 5)
+                except ValueError:
+                    pass   # 途中で切れたコマ
             if len(out) == len(want):
                 break
     return out
@@ -96,6 +133,26 @@ def nozzles(xlen):
     except Exception:
         return None
 
+def fill_pad(x, y, C, elec, xlen):
+    """補間して塗るための下準備（2026-11-19）。
+    電極の中の格子点を、まわりの気体の値で埋める（そのままだと電極のまわりに白いすき間ができる）。
+    さらに、計算領域の端（x = 0, xlen、y の上端・下端）まで端の値を延ばす（端の半セル分が白くならないように）。"""
+    Z = np.array(C, float); known = ~elec.copy()
+    for _ in range(500):
+        if known.all(): break
+        Zp = np.pad(np.where(known, Z, 0.0), 1); Kp = np.pad(known.astype(float), 1)
+        s = Zp[:-2, 1:-1] + Zp[2:, 1:-1] + Zp[1:-1, :-2] + Zp[1:-1, 2:]
+        n = Kp[:-2, 1:-1] + Kp[2:, 1:-1] + Kp[1:-1, :-2] + Kp[1:-1, 2:]
+        new = (~known) & (n > 0)
+        Z[new] = s[new] / n[new]; known = known | new
+    xs = x[0]; ys = y[:, 0]
+    dy0 = ys[1] - ys[0]; dy1 = ys[-1] - ys[-2]
+    xs = np.concatenate([[min(0.0, xs[0])], xs, [max(xlen, xs[-1])]])
+    # flow.dat は上端の 1 行を書き出していないので、上は 1.5 セル分延ばす（例: 最後の行 99.7 mm → 100 mm）
+    ys = np.concatenate([[ys[0] - dy0 / 2], ys, [ys[-1] + 1.5 * dy1]])
+    X, Y = np.meshgrid(xs, ys)
+    return X, Y, np.pad(Z, 1, mode="edge")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--flow", default="flow.dat")
@@ -105,6 +162,7 @@ def main():
     ap.add_argument("--zmax", type=float, default=100.0)
     ap.add_argument("--rmax", type=float, default=8.0, help="1本・対向のときの r の範囲 [mm]")
     ap.add_argument("--ctop", type=float, default=None, help="C_total の色の上端 [mol]")
+    ap.add_argument("--cells", action="store_true", help="補間せず格子のセルをそのまま塗る（以前の見え方）")
     ap.add_argument("--stride", type=int, default=1, help="flow.dat のコマを間引く")
     ap.add_argument("--gif", action="store_true")
     ap.add_argument("--layout", default="absorb", choices=["absorb", "auto", "half", "mirror"],
@@ -141,7 +199,7 @@ def main():
     if not fl:
         sys.exit("flow.dat にコマがありません")
     want = set(f["istp"] for f in fl)
-    sp = read_spray(a.spray, want)
+    sp = read_spray(a.spray, want) if a.layout != "absorb" else {}   # 吸収だけの図では液滴は使わない
     # 円筒か平面か: 円筒は diffusion1.f に 2*pi*x がある
     cyl = False
     if os.path.exists("diffusion1.f"):
@@ -197,7 +255,11 @@ def render_all(a, fl, sp, cyl, x, y, xlen, elec, cmap, norm, lv, dnorm, dlab, ds
         Cp = np.ma.masked_where(elec, np.clip(f["cvol"], lv[0] * 0.5, None))
         m = x >= xl_g[0] - 1e-9
         cols = np.where(m[0])[0]
-        ax.pcolormesh(x[:, cols], y[:, cols], Cp[:, cols], cmap=cmap, norm=norm, shading="nearest", zorder=1)
+        if a.cells:
+            ax.pcolormesh(x[:, cols], y[:, cols], Cp[:, cols], cmap=cmap, norm=norm, shading="nearest", zorder=1)
+        else:
+            _, _, Z = fill_pad(x, y, np.clip(f["cvol"], lv[0] * 0.5, None), elec, xlen)
+            ax.contourf(x[:, cols], y[:, cols], Z[1:-1, 1:-1][:, cols], levels=lv, cmap=cmap, norm=norm, extend="both", zorder=1)
         E = np.ma.masked_where(~elec, np.ones_like(f["cvol"]))
         ax.pcolormesh(x, y, E, cmap=ListedColormap(["0.8"]), shading="nearest", zorder=2)
         if a.layout != "mirror":
@@ -255,7 +317,11 @@ def render_absorb(a, fl, x, y, xlen, elec, cmap, norm, lv, xl_g, zmin_, zmax_, o
         ax = fig.add_axes([0.08, 0.12, 0.72, 0.74])
         cax = fig.add_axes([0.84, 0.12, 0.025, 0.70])
         Cp = np.ma.masked_where(elec, np.clip(f["cvol"], lv[0] * 0.5, None))
-        ax.pcolormesh(x, y, Cp, cmap=cmap, norm=norm, shading="nearest", zorder=1)
+        if a.cells:   # 格子のセルをそのまま塗る（カクカク）
+            ax.pcolormesh(x, y, Cp, cmap=cmap, norm=norm, shading="nearest", zorder=1)
+        else:         # 格子点の間を補間して等高線で塗る（川谷さんの図と同じ見え方）
+            X, Y, Z = fill_pad(x, y, np.clip(f["cvol"], lv[0] * 0.5, None), elec, xlen)
+            ax.contourf(X, Y, Z, levels=lv, cmap=cmap, norm=norm, extend="both", zorder=1)
         E = np.ma.masked_where(~elec, np.ones_like(f["cvol"]))
         ax.pcolormesh(x, y, E, cmap=ListedColormap(["0.8"]), shading="nearest", zorder=2)
         nz = nozzles(xlen)
